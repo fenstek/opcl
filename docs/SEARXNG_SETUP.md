@@ -16,7 +16,8 @@ resolution (`searxng:8080`).
 | Path                        | Purpose                              |
 |-----------------------------|--------------------------------------|
 | `/opt/searxng/docker-compose.yml`     | SearxNG + Redis compose stack |
-| `/opt/searxng/searxng/settings.yml`  | SearxNG instance config (format: json, limiter: false) |
+| `/opt/searxng/searxng/settings.yml`  | SearxNG instance config (format: json, limiter: true) |
+| `/opt/searxng/searxng/limiter.toml`  | Bot-detection config: pass_ip whitelist for internal network |
 | `/opt/openclaw/app/docker-compose.override.yml` | Gateway: browser build arg, SearxNG env, shared network |
 | `/opt/openclaw/app/.env`             | `SEARXNG_BASE_URL=http://searxng:8080` |
 | `/opt/openclaw/state/openclaw.json`  | `tools.web.search.provider = "searxng"` |
@@ -131,8 +132,59 @@ cd /opt/searxng && docker compose restart searxng
 
 Key settings in `settings.yml`:
 - `search.formats: [html, json]` — must include `json`
-- `server.limiter: false` — disable rate limiter for internal use
+- `server.limiter: true` — rate limiter enabled (bot detection active)
 - `server.public_instance: false`
+
+## Rate Limiting
+
+The built-in SearxNG bot-detection limiter is **enabled** (`limiter: true`).
+Custom rules are in `/opt/searxng/searxng/limiter.toml` (owned by uid 977).
+
+### How it works
+
+| Client IP | Result | Reason |
+|-----------|--------|--------|
+| `172.20.0.4` (gateway) | PASS | `pass_ip = ['172.20.0.0/16']` |
+| `172.20.0.1` (Docker bridge / localhost NAT) | PASS | same subnet |
+| Any other IP | limited/blocked | default SearxNG bot-detection |
+
+The gateway container is on the `openclaw-tools` network (`172.20.0.0/16`) and
+is permanently whitelisted — it will never be rate-limited regardless of request
+frequency. All other clients hitting port 28888 are subject to the default
+SearxNG sliding-window rate limiter backed by Redis.
+
+### limiter.toml (key section)
+
+```toml
+[botdetection.ip_lists]
+pass_ip = [
+  '172.20.0.0/16',   # openclaw-tools docker network (gateway)
+  '127.0.0.1',       # local debug access
+]
+pass_searxng_org = false
+
+[botdetection.ip_limit]
+link_token = false   # no browser token challenge — API-only instance
+```
+
+### Verify limiter is active
+
+```bash
+# Should return 429 (non-whitelisted external IP)
+curl -s -o /dev/null -w '%{http_code}' \
+  -H 'X-Forwarded-For: 1.2.3.4' \
+  'http://127.0.0.1:28888/search?q=test&format=json'
+
+# Check SearxNG logs for PASSLIST confirmations
+docker logs searxng 2>&1 | grep 'limiter\|PASS' | tail -10
+```
+
+### Updating limiter rules
+
+```bash
+sudo nano /opt/searxng/searxng/limiter.toml
+cd /opt/searxng && docker compose restart searxng
+```
 
 ## Network Topology
 
