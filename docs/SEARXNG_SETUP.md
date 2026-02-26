@@ -185,7 +185,6 @@ docker logs searxng 2>&1 | grep 'limiter\|PASS' | tail -10
 sudo nano /opt/searxng/searxng/limiter.toml
 cd /opt/searxng && docker compose restart searxng
 ```
-
 ## Network Topology
 
 ```
