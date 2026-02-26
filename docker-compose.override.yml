@@ -1,0 +1,22 @@
+services:
+  openclaw-gateway:
+    build:
+      context: .
+      args:
+        OPENCLAW_INSTALL_BROWSER: "1"
+    image: openclaw:local
+    ports:
+      - "127.0.0.1:28789:18789"
+      - "127.0.0.1:28790:18791"
+    environment:
+      SEARXNG_BASE_URL: ${SEARXNG_BASE_URL:-http://searxng:8080}
+    networks:
+      - default
+      - openclaw-tools
+
+  openclaw-cli:
+    image: openclaw:local
+
+networks:
+  openclaw-tools:
+    external: true
