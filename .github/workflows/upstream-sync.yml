@@ -1,0 +1,283 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# upstream-sync.yml — автоматическая синхронизация форка с openclaw/openclaw
+#
+# Логика (вариант B2):
+#   1. Fetch upstream/main
+#   2. Если новых коммитов нет — выходим (отчёт в лог)
+#   3. Если есть — rebase origin/main onto upstream/main (-X theirs)
+#   4. Push --force-with-lease в origin/main
+#   5. (Опционально) SSH deploy на VPS через vps_deploy_safe.sh
+#   6. Telegram уведомление
+#
+# Секреты (Settings → Secrets and variables → Actions):
+#   TELEGRAM_BOT_TOKEN  — токен Telegram-бота      (необязательно)
+#   TELEGRAM_CHAT_ID    — chat_id получателя        (необязательно)
+#   VPS_SSH_KEY         — приватный SSH-ключ для VPS (необязательно)
+#   VPS_HOST            — IP/hostname VPS            (необязательно)
+#   VPS_USER            — SSH-пользователь на VPS    (необязательно)
+# ──────────────────────────────────────────────────────────────────────────────
+
+name: Upstream Sync
+
+on:
+  schedule:
+    # Ежедневно в 06:00 UTC
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run — проверить без push'
+        required: false
+        default: 'false'
+        type: boolean
+      force_sync:
+        description: 'Форсировать sync даже если нет новых коммитов'
+        required: false
+        default: 'false'
+        type: boolean
+
+# Необходимо для git push в origin/main
+permissions:
+  contents: write
+
+env:
+  UPSTREAM_REMOTE: upstream
+  UPSTREAM_REPO: https://github.com/openclaw/openclaw.git
+  UPSTREAM_BRANCH: main
+  ORIGIN_BRANCH: main
+
+jobs:
+  sync:
+    name: Sync with upstream
+    runs-on: ubuntu-latest
+    outputs:
+      synced:         ${{ steps.check.outputs.synced }}
+      commits_ahead:  ${{ steps.check.outputs.commits_ahead }}
+      upstream_sha:   ${{ steps.check.outputs.upstream_sha }}
+      origin_sha_old: ${{ steps.check.outputs.origin_sha_old }}
+      origin_sha_new: ${{ steps.rebase.outputs.origin_sha_new }}
+      rebase_status:  ${{ steps.rebase.outputs.status }}
+
+    steps:
+      # ── 1. Checkout (полная история нужна для rebase) ────────────────────────
+      - name: Checkout fork
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      # ── 2. Git identity ───────────────────────────────────────────────────────
+      - name: Configure git identity
+        run: |
+          git config user.email "actions-sync@github.com"
+          git config user.name  "Upstream Sync Bot"
+
+      # ── 3. Добавить upstream remote и fetch ──────────────────────────────────
+      - name: Add upstream remote and fetch
+        run: |
+          if git remote get-url "$UPSTREAM_REMOTE" &>/dev/null; then
+            echo "Remote '$UPSTREAM_REMOTE' already exists — updating URL"
+            git remote set-url "$UPSTREAM_REMOTE" "$UPSTREAM_REPO"
+          else
+            git remote add "$UPSTREAM_REMOTE" "$UPSTREAM_REPO"
+            echo "Added remote '$UPSTREAM_REMOTE' -> $UPSTREAM_REPO"
+          fi
+          git fetch "$UPSTREAM_REMOTE" "$UPSTREAM_BRANCH" --prune
+
+      # ── 4. Проверить наличие новых коммитов ──────────────────────────────────
+      - name: Check for new upstream commits
+        id: check
+        run: |
+          UPSTREAM_SHA=$(git rev-parse "${UPSTREAM_REMOTE}/${UPSTREAM_BRANCH}")
+          ORIGIN_SHA=$(git rev-parse "origin/${ORIGIN_BRANCH}")
+          COMMITS_AHEAD=$(git log --oneline \
+            "origin/${ORIGIN_BRANCH}".."${UPSTREAM_REMOTE}/${UPSTREAM_BRANCH}" \
+            | wc -l | tr -d ' ')
+
+          echo "upstream_sha=${UPSTREAM_SHA}"   >> "$GITHUB_OUTPUT"
+          echo "origin_sha_old=${ORIGIN_SHA}"   >> "$GITHUB_OUTPUT"
+          echo "commits_ahead=${COMMITS_AHEAD}" >> "$GITHUB_OUTPUT"
+
+          echo "upstream/main : ${UPSTREAM_SHA}"
+          echo "origin/main   : ${ORIGIN_SHA}"
+          echo "New upstream commits: ${COMMITS_AHEAD}"
+
+          if [[ "$COMMITS_AHEAD" -eq 0 && "${{ inputs.force_sync }}" != "true" ]]; then
+            echo "synced=false" >> "$GITHUB_OUTPUT"
+            echo "-> Already up to date. No action needed."
+          else
+            echo "synced=true" >> "$GITHUB_OUTPUT"
+            echo "-> ${COMMITS_AHEAD} new commit(s) detected — will rebase."
+          fi
+
+      # ── 5. Лог если актуально ────────────────────────────────────────────────
+      - name: Log summary — already up to date
+        if: steps.check.outputs.synced == 'false'
+        run: |
+          echo "================================================"
+          echo "  UPSTREAM SYNC -- $(date -u '+%Y-%m-%d %H:%M UTC')"
+          echo "================================================"
+          echo "  Status        : UP TO DATE"
+          echo "  upstream/main : ${{ steps.check.outputs.upstream_sha }}"
+          echo "  No action required."
+          echo "================================================"
+
+      # ── 6. Rebase origin/main onto upstream/main ─────────────────────────────
+      - name: Rebase onto upstream/main
+        id: rebase
+        if: steps.check.outputs.synced == 'true'
+        run: |
+          set -euo pipefail
+
+          git checkout "$ORIGIN_BRANCH"
+
+          # -X theirs: при конфликтах предпочитаем наши кастомные коммиты
+          if git rebase -X theirs "${UPSTREAM_REMOTE}/${UPSTREAM_BRANCH}"; then
+            NEW_SHA=$(git rev-parse HEAD)
+            echo "origin_sha_new=${NEW_SHA}" >> "$GITHUB_OUTPUT"
+            echo "status=success"            >> "$GITHUB_OUTPUT"
+            echo "Rebase succeeded -> new HEAD: ${NEW_SHA}"
+          else
+            git rebase --abort || true
+            echo "status=conflict" >> "$GITHUB_OUTPUT"
+            echo "::error::Rebase failed with conflicts — aborting. Manual intervention required."
+            exit 1
+          fi
+
+      # ── 7. Push (если не dry_run) ─────────────────────────────────────────────
+      - name: Push to origin/main
+        if: >-
+          steps.check.outputs.synced == 'true' &&
+          steps.rebase.outputs.status == 'success' &&
+          inputs.dry_run != 'true'
+        run: |
+          git push origin "${ORIGIN_BRANCH}" --force-with-lease
+          echo "Pushed: $(git rev-parse HEAD) -> origin/${ORIGIN_BRANCH}"
+
+      - name: Dry run — would push
+        if: >-
+          steps.check.outputs.synced == 'true' &&
+          steps.rebase.outputs.status == 'success' &&
+          inputs.dry_run == 'true'
+        run: |
+          echo "[DRY RUN] Would push $(git rev-parse HEAD) -> origin/${ORIGIN_BRANCH}"
+          echo "[DRY RUN] No changes made."
+
+      # ── 8. Финальный отчёт ───────────────────────────────────────────────────
+      - name: Sync report
+        if: steps.check.outputs.synced == 'true'
+        run: |
+          DRY=""
+          if [[ "${{ inputs.dry_run }}" == "true" ]]; then DRY=" (DRY RUN)"; fi
+          echo "================================================"
+          echo "  UPSTREAM SYNC -- $(date -u '+%Y-%m-%d %H:%M UTC')"
+          echo "================================================"
+          echo "  Status          : SYNCED${DRY}"
+          echo "  upstream/main   : ${{ steps.check.outputs.upstream_sha }}"
+          echo "  origin/main was : ${{ steps.check.outputs.origin_sha_old }}"
+          echo "  origin/main now : ${{ steps.rebase.outputs.origin_sha_new }}"
+          echo "  Commits absorbed: ${{ steps.check.outputs.commits_ahead }}"
+          echo "================================================"
+
+  # ── VPS Deploy (опционально — если настроен VPS_SSH_KEY) ─────────────────────
+  vps-deploy:
+    name: Deploy to VPS
+    needs: sync
+    runs-on: ubuntu-latest
+    # Запускается только если sync успешен, не dry_run, и в репо есть SSH-секреты
+    if: >-
+      needs.sync.outputs.synced == 'true' &&
+      needs.sync.outputs.rebase_status == 'success' &&
+      github.event.inputs.dry_run != 'true'
+    steps:
+      - name: Check VPS secrets
+        id: vps_check
+        env:
+          HAS_KEY:  ${{ secrets.VPS_SSH_KEY != '' }}
+          HAS_HOST: ${{ secrets.VPS_HOST != '' }}
+          HAS_USER: ${{ secrets.VPS_USER != '' }}
+        run: |
+          if [[ "$HAS_KEY" == "true" && "$HAS_HOST" == "true" && "$HAS_USER" == "true" ]]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+            echo "VPS secrets found — will deploy."
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "VPS_SSH_KEY / VPS_HOST / VPS_USER not set."
+            echo "Skipping automated VPS deploy."
+            echo "To deploy manually: ssh to VPS and run scripts/vps_deploy_safe.sh"
+          fi
+
+      - name: SSH deploy to VPS
+        if: steps.vps_check.outputs.available == 'true'
+        env:
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          VPS_HOST:    ${{ secrets.VPS_HOST }}
+          VPS_USER:    ${{ secrets.VPS_USER }}
+        run: |
+          install -m 600 /dev/null /tmp/vps_key
+          printf '%s' "$VPS_SSH_KEY" > /tmp/vps_key
+
+          ssh -i /tmp/vps_key \
+              -o StrictHostKeyChecking=no \
+              -o ConnectTimeout=30 \
+              -o BatchMode=yes \
+              "${VPS_USER}@${VPS_HOST}" \
+              'bash /opt/openclaw/app/scripts/vps_deploy_safe.sh \
+                 --app-dir /opt/openclaw/app \
+                 --ref origin/main \
+                 --healthcheck-script /opt/openclaw/scripts/health_check_openclaw.sh'
+
+          rm -f /tmp/vps_key
+
+  # ── Telegram уведомление ──────────────────────────────────────────────────────
+  notify:
+    name: Telegram notification
+    needs: [sync, vps-deploy]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Send Telegram notification
+        env:
+          BOT_TOKEN:     ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          CHAT_ID:       ${{ secrets.TELEGRAM_CHAT_ID }}
+          SYNC_RESULT:   ${{ needs.sync.result }}
+          DEPLOY_RESULT: ${{ needs.vps-deploy.result }}
+          SYNCED:        ${{ needs.sync.outputs.synced }}
+          COMMITS:       ${{ needs.sync.outputs.commits_ahead }}
+          SHA_NEW:       ${{ needs.sync.outputs.origin_sha_new }}
+          UPSTREAM_SHA:  ${{ needs.sync.outputs.upstream_sha }}
+        run: |
+          if [[ -z "$BOT_TOKEN" || -z "$CHAT_ID" ]]; then
+            echo "TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID not configured — skipping."
+            exit 0
+          fi
+
+          DATE=$(date -u '+%Y-%m-%d %H:%M UTC')
+          RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+          build_msg() {
+            if [[ "$SYNC_RESULT" == "success" && "$SYNCED" == "false" ]]; then
+              printf '✅ Upstream Sync\n%s\nАктуально — новых коммитов нет.' "$DATE"
+            elif [[ "$SYNC_RESULT" == "success" && "$SYNCED" == "true" ]]; then
+              DEPLOY_LINE=""
+              case "$DEPLOY_RESULT" in
+                success) DEPLOY_LINE="\n🚀 VPS: задеплоено успешно" ;;
+                skipped) DEPLOY_LINE="\n⏭ VPS: пропущено (нет SSH-секретов)" ;;
+                failure) DEPLOY_LINE="\n❌ VPS: ошибка деплоя" ;;
+              esac
+              printf '🔄 Upstream Sync\n%s\nАбсорбировано: %s коммитов\nHEAD: %s%s\nЛог: %s' \
+                "$DATE" "$COMMITS" "${SHA_NEW:0:12}" "$DEPLOY_LINE" "$RUN_URL"
+            else
+              printf '❌ Upstream Sync — ошибка\n%s\nsync: %s\nЛог: %s' \
+                "$DATE" "$SYNC_RESULT" "$RUN_URL"
+            fi
+          }
+
+          TEXT=$(build_msg)
+
+          curl -sS -X POST \
+            "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
+            --data-urlencode "chat_id=${CHAT_ID}" \
+            --data-urlencode "text=${TEXT}" \
+            -d "parse_mode=" \
+            > /dev/null && echo "Telegram: sent." || echo "Telegram: send failed (non-fatal)."
