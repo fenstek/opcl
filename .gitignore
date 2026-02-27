@@ -120,3 +120,8 @@ dist/protocol.schema.json
 
 # Synthing
 **/.stfolder/
+
+# VPS deployment — backups and runtime data
+*.bak_*
+*.bak*
+reports/
