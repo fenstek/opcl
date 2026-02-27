@@ -1,0 +1,33 @@
+services:
+  openclaw-gateway:
+    build:
+      context: .
+      args:
+        OPENCLAW_INSTALL_BROWSER: "1"
+        OPENCLAW_DOCKER_APT_PACKAGES: "jq"
+    image: openclaw:local
+    ports:
+      - "127.0.0.1:28789:18789"
+      - "127.0.0.1:28790:18791"
+    environment:
+      SEARXNG_BASE_URL: ${SEARXNG_BASE_URL:-http://searxng:8080}
+    volumes:
+      # utildesk-openclaw: SSH key (ro), known_hosts (ro), wrapper script (ro)
+      - /home/opcl/.ssh/id_ed25519_utildesk_openclaw:/home/node/.ssh/id_ed25519_utildesk_openclaw:ro
+      - /home/opcl/.ssh/id_ed25519_utildesk_openclaw.pub:/home/node/.ssh/id_ed25519_utildesk_openclaw.pub:ro
+      - /opt/openclaw/scripts/ssh/known_hosts:/home/node/.ssh/known_hosts:ro
+      - /opt/openclaw/scripts/utildesk_ssh.sh:/usr/local/bin/utildesk_ssh:ro
+    networks:
+      - default
+      - openclaw-tools
+    # Memory cap: prevents Chromium renderer tab leak from OOM-ing the host.
+    # VPS has 4GB total; 2.8GB gives gateway+Chromium enough room, leaves ~1.2GB for other containers.
+    mem_limit: 2800m
+    memswap_limit: 2800m
+
+  openclaw-cli:
+    image: openclaw:local
+
+networks:
+  openclaw-tools:
+    external: true
