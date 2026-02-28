@@ -104,7 +104,6 @@ type BraveSearchResponse = {
   };
 };
 
-
 type SearxNGConfig = {
   baseUrl?: string;
   apiKey?: string;
@@ -1348,7 +1347,9 @@ async function runWebSearch(params: {
     try {
       if (!searxngRes.ok) {
         const detail = await readResponseText(searxngRes, { maxBytes: 64_000 });
-        throw new Error(`SearxNG error (${searxngRes.status}): ${detail.text || searxngRes.statusText}`);
+        throw new Error(
+          `SearxNG error (${searxngRes.status}): ${detail.text || searxngRes.statusText}`,
+        );
       }
       searxngData = (await searxngRes.json()) as SearxNGSearchResponse;
     } finally {
@@ -1404,30 +1405,28 @@ async function runWebSearch(params: {
       Accept: "application/json",
       "X-Subscription-Token": params.apiKey!,
     },
-    async (res) => {
-      if (!res.ok) {
-        const detailResult = await readResponseText(res, { maxBytes: 64_000 });
-        const detail = detailResult.text;
-        throw new Error(`Brave Search API error (${res.status}): ${detail || res.statusText}`);
-      }
+  });
+  if (!res.ok) {
+    const detailResult = await readResponseText(res, { maxBytes: 64_000 });
+    const detail = detailResult.text;
+    throw new Error(`Brave Search API error (${res.status}): ${detail || res.statusText}`);
+  }
 
-      const data = (await res.json()) as BraveSearchResponse;
-      const results = Array.isArray(data.web?.results) ? (data.web?.results ?? []) : [];
-      return results.map((entry) => {
-        const description = entry.description ?? "";
-        const title = entry.title ?? "";
-        const url = entry.url ?? "";
-        const rawSiteName = resolveSiteName(url);
-        return {
-          title: title ? wrapWebContent(title, "web_search") : "",
-          url, // Keep raw for tool chaining
-          description: description ? wrapWebContent(description, "web_search") : "",
-          published: entry.age || undefined,
-          siteName: rawSiteName || undefined,
-        };
-      });
-    },
-  );
+  const data = (await res.json()) as BraveSearchResponse;
+  const results = Array.isArray(data.web?.results) ? (data.web?.results ?? []) : [];
+  return results.map((entry) => {
+    const description = entry.description ?? "";
+    const title = entry.title ?? "";
+    const url = entry.url ?? "";
+    const rawSiteName = resolveSiteName(url);
+    return {
+      title: title ? wrapWebContent(title, "web_search") : "",
+      url, // Keep raw for tool chaining
+      description: description ? wrapWebContent(description, "web_search") : "",
+      published: entry.age || undefined,
+      siteName: rawSiteName || undefined,
+    };
+  });
 
   const payload = {
     query: params.query,
@@ -1445,7 +1444,6 @@ async function runWebSearch(params: {
   writeCache(SEARCH_CACHE, cacheKey, payload, params.cacheTtlMs);
   return payload;
 }
-
 
 function resolveSearxNGConfig(search?: WebSearchConfig): SearxNGConfig {
   if (!search || typeof search !== "object") {
