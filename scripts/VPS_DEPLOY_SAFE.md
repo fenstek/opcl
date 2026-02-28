@@ -156,16 +156,26 @@ docker compose up -d
 
 ---
 
-## Интеграция с upstream-sync.yml
+## Интеграция с CI/CD
 
-`vps_deploy_safe.sh` вызывается автоматически из [upstream-sync.yml](../.github/workflows/upstream-sync.yml)
-если заданы GitHub Secrets `VPS_SSH_KEY`, `VPS_HOST`, `VPS_USER`.
+> **Деплой теперь триггерится после merge PR или вручную через `workflow_dispatch`.**
+
+`vps_deploy_safe.sh` вызывается автоматически из [`vps-deploy.yml`](../.github/workflows/vps-deploy.yml):
+- при **push в main** (если изменились не только docs/markdown)
+- при **ручном запуске** через `workflow_dispatch` с опциональным `ref`
+
+Secrets: `VPS_SSH_KEY`, `VPS_HOST`, `VPS_USER` в Settings → Secrets → Actions.
 
 ```
-GitHub Actions (upstream-sync.yml)
-  └── SSH → VPS
-        └── scripts/vps_deploy_safe.sh --app-dir /opt/openclaw/app --ref origin/main
+GitHub Actions (vps-deploy.yml)
+  └── push→main | workflow_dispatch
+        └── SSH → VPS
+              └── scripts/vps_deploy_safe.sh --app-dir /opt/openclaw/app --ref origin/main
 ```
+
+upstream-sync.yml работает отдельно: создаёт ветку `sync/upstream-YYYYMMDD-<sha>`,
+делает rebase, открывает PR — но **не деплоит напрямую**.
+После merge PR триггерится vps-deploy.yml.
 
 ### Настройка автодеплоя
 

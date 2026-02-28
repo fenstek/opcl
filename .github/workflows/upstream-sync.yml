@@ -1,20 +1,18 @@
 # ──────────────────────────────────────────────────────────────────────────────
-# upstream-sync.yml — автоматическая синхронизация форка с openclaw/openclaw
+# upstream-sync.yml — PR-based синхронизация форка с openclaw/openclaw
 #
-# Логика (вариант B2):
+# Логика:
 #   1. Fetch upstream/main
 #   2. Если новых коммитов нет — выходим (отчёт в лог)
-#   3. Если есть — rebase origin/main onto upstream/main (-X theirs)
-#   4. Push --force-with-lease в origin/main
-#   5. (Опционально) SSH deploy на VPS через vps_deploy_safe.sh
-#   6. Telegram уведомление
+#   3. Если есть — создаём ветку sync/upstream-YYYYMMDD-<shortsha>
+#   4. Rebase ветки на upstream/main (без -X theirs — fail при конфликте)
+#   5. Push ветки в origin (не force в main)
+#   6. Открываем PR в main (или авто-мерджим при auto_merge=true)
+#   7. Telegram уведомление
 #
 # Секреты (Settings → Secrets and variables → Actions):
 #   TELEGRAM_BOT_TOKEN  — токен Telegram-бота      (необязательно)
 #   TELEGRAM_CHAT_ID    — chat_id получателя        (необязательно)
-#   VPS_SSH_KEY         — приватный SSH-ключ для VPS (необязательно)
-#   VPS_HOST            — IP/hostname VPS            (необязательно)
-#   VPS_USER            — SSH-пользователь на VPS    (необязательно)
 # ──────────────────────────────────────────────────────────────────────────────
 
 name: Upstream Sync
@@ -26,7 +24,7 @@ on:
   workflow_dispatch:
     inputs:
       dry_run:
-        description: 'Dry run — проверить без push'
+        description: 'Dry run — не пушить и не создавать PR'
         required: false
         default: 'false'
         type: boolean
@@ -35,10 +33,20 @@ on:
         required: false
         default: 'false'
         type: boolean
+      auto_merge:
+        description: 'Авто-мерджить PR после создания (rebase merge)'
+        required: false
+        default: 'false'
+        type: boolean
 
-# Необходимо для git push в origin/main
+# Предотвращаем параллельные запуски sync
+concurrency:
+  group: upstream-sync
+  cancel-in-progress: false
+
+# Минимальные права на уровне workflow
 permissions:
-  contents: write
+  contents: read
 
 env:
   UPSTREAM_REMOTE: upstream
@@ -50,13 +58,19 @@ jobs:
   sync:
     name: Sync with upstream
     runs-on: ubuntu-latest
+    # Права только там где нужны
+    permissions:
+      contents: write       # push sync branch
+      pull-requests: write  # create PR
     outputs:
-      synced:         ${{ steps.check.outputs.synced }}
-      commits_ahead:  ${{ steps.check.outputs.commits_ahead }}
-      upstream_sha:   ${{ steps.check.outputs.upstream_sha }}
-      origin_sha_old: ${{ steps.check.outputs.origin_sha_old }}
-      origin_sha_new: ${{ steps.rebase.outputs.origin_sha_new }}
-      rebase_status:  ${{ steps.rebase.outputs.status }}
+      synced:        ${{ steps.check.outputs.synced }}
+      commits_ahead: ${{ steps.check.outputs.commits_ahead }}
+      upstream_sha:  ${{ steps.check.outputs.upstream_sha }}
+      origin_sha:    ${{ steps.check.outputs.origin_sha }}
+      sync_branch:   ${{ steps.branch.outputs.sync_branch }}
+      rebase_status: ${{ steps.rebase.outputs.status }}
+      pr_url:        ${{ steps.pr.outputs.pr_url }}
+      pr_number:     ${{ steps.pr.outputs.pr_number }}
 
     steps:
       # ── 1. Checkout (полная история нужна для rebase) ────────────────────────
@@ -95,7 +109,7 @@ jobs:
             | wc -l | tr -d ' ')
 
           echo "upstream_sha=${UPSTREAM_SHA}"   >> "$GITHUB_OUTPUT"
-          echo "origin_sha_old=${ORIGIN_SHA}"   >> "$GITHUB_OUTPUT"
+          echo "origin_sha=${ORIGIN_SHA}"       >> "$GITHUB_OUTPUT"
           echo "commits_ahead=${COMMITS_AHEAD}" >> "$GITHUB_OUTPUT"
 
           echo "upstream/main : ${UPSTREAM_SHA}"
@@ -107,11 +121,11 @@ jobs:
             echo "-> Already up to date. No action needed."
           else
             echo "synced=true" >> "$GITHUB_OUTPUT"
-            echo "-> ${COMMITS_AHEAD} new commit(s) detected — will rebase."
+            echo "-> ${COMMITS_AHEAD} new commit(s) detected — will sync via PR."
           fi
 
       # ── 5. Лог если актуально ────────────────────────────────────────────────
-      - name: Log summary — already up to date
+      - name: Log — already up to date
         if: steps.check.outputs.synced == 'false'
         run: |
           echo "================================================"
@@ -122,130 +136,171 @@ jobs:
           echo "  No action required."
           echo "================================================"
 
-      # ── 6. Rebase origin/main onto upstream/main ─────────────────────────────
+      # ── 6. Создать sync ветку ────────────────────────────────────────────────
+      - name: Create sync branch
+        id: branch
+        if: steps.check.outputs.synced == 'true'
+        run: |
+          DATE=$(date -u '+%Y%m%d')
+          SHORT_SHA=$(echo "${{ steps.check.outputs.upstream_sha }}" | cut -c1-8)
+          SYNC_BRANCH="sync/upstream-${DATE}-${SHORT_SHA}"
+          echo "sync_branch=${SYNC_BRANCH}" >> "$GITHUB_OUTPUT"
+          echo "Creating branch: ${SYNC_BRANCH}"
+          git checkout "$ORIGIN_BRANCH"
+          git checkout -b "$SYNC_BRANCH"
+
+      # ── 7. Rebase (без -X theirs — fail при конфликте) ───────────────────────
       - name: Rebase onto upstream/main
         id: rebase
         if: steps.check.outputs.synced == 'true'
         run: |
           set -euo pipefail
 
-          git checkout "$ORIGIN_BRANCH"
-
-          # -X theirs: при конфликтах предпочитаем наши кастомные коммиты
-          if git rebase -X theirs "${UPSTREAM_REMOTE}/${UPSTREAM_BRANCH}"; then
+          # Без -X theirs: конфликт = fail (требуется ручное разрешение)
+          if git rebase "${UPSTREAM_REMOTE}/${UPSTREAM_BRANCH}"; then
             NEW_SHA=$(git rev-parse HEAD)
-            echo "origin_sha_new=${NEW_SHA}" >> "$GITHUB_OUTPUT"
-            echo "status=success"            >> "$GITHUB_OUTPUT"
+            echo "status=success" >> "$GITHUB_OUTPUT"
             echo "Rebase succeeded -> new HEAD: ${NEW_SHA}"
           else
             git rebase --abort || true
             echo "status=conflict" >> "$GITHUB_OUTPUT"
-            echo "::error::Rebase failed with conflicts — aborting. Manual intervention required."
+            echo "::error::Rebase FAILED with conflicts. Manual intervention required."
             exit 1
           fi
 
-      # ── 7. Push (если не dry_run) ─────────────────────────────────────────────
-      - name: Push to origin/main
+      # ── 8. Push sync ветки в origin ──────────────────────────────────────────
+      - name: Push sync branch to origin
         if: >-
           steps.check.outputs.synced == 'true' &&
           steps.rebase.outputs.status == 'success' &&
           inputs.dry_run != 'true'
         run: |
-          git push origin "${ORIGIN_BRANCH}" --force-with-lease
-          echo "Pushed: $(git rev-parse HEAD) -> origin/${ORIGIN_BRANCH}"
+          SYNC_BRANCH="${{ steps.branch.outputs.sync_branch }}"
+          git push origin "${SYNC_BRANCH}" --force-with-lease
+          echo "Pushed branch ${SYNC_BRANCH} to origin"
 
-      - name: Dry run — would push
+      - name: Dry run — would push branch
         if: >-
           steps.check.outputs.synced == 'true' &&
           steps.rebase.outputs.status == 'success' &&
           inputs.dry_run == 'true'
         run: |
-          echo "[DRY RUN] Would push $(git rev-parse HEAD) -> origin/${ORIGIN_BRANCH}"
+          SYNC_BRANCH="${{ steps.branch.outputs.sync_branch }}"
+          echo "[DRY RUN] Would push branch ${SYNC_BRANCH} to origin"
+          echo "[DRY RUN] Would open PR: ${SYNC_BRANCH} -> ${ORIGIN_BRANCH}"
           echo "[DRY RUN] No changes made."
 
-      # ── 8. Финальный отчёт ───────────────────────────────────────────────────
+      # ── 9. Открыть PR ────────────────────────────────────────────────────────
+      - name: Create or find PR
+        id: pr
+        if: >-
+          steps.check.outputs.synced == 'true' &&
+          steps.rebase.outputs.status == 'success' &&
+          inputs.dry_run != 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const syncBranch  = '${{ steps.branch.outputs.sync_branch }}';
+            const baseBranch  = process.env.ORIGIN_BRANCH;
+            const commits     = '${{ steps.check.outputs.commits_ahead }}';
+            const upstreamSha = '${{ steps.check.outputs.upstream_sha }}'.slice(0, 12);
+
+            const title = `chore(sync): upstream sync ${new Date().toISOString().slice(0,10)} (${commits} commit(s))`;
+            const body = [
+              '## Upstream Sync',
+              '',
+              'Автоматическая синхронизация с `openclaw/openclaw` upstream.',
+              '',
+              `- **Upstream SHA**: \`${upstreamSha}\``,
+              `- **Новых коммитов**: ${commits}`,
+              `- **Ветка**: \`${syncBranch}\``,
+              '',
+              '> Создано автоматически workflow [`upstream-sync.yml`](.github/workflows/upstream-sync.yml)',
+            ].join('\n');
+
+            // Ищем существующий открытый PR для этой ветки
+            const existing = await github.rest.pulls.list({
+              owner: context.repo.owner,
+              repo:  context.repo.repo,
+              head:  `${context.repo.owner}:${syncBranch}`,
+              state: 'open',
+            });
+
+            let pr;
+            if (existing.data.length > 0) {
+              pr = existing.data[0];
+              core.info(`Found existing PR #${pr.number}: ${pr.html_url}`);
+            } else {
+              const created = await github.rest.pulls.create({
+                owner: context.repo.owner,
+                repo:  context.repo.repo,
+                title,
+                body,
+                head:  syncBranch,
+                base:  baseBranch,
+              });
+              pr = created.data;
+              core.info(`Created PR #${pr.number}: ${pr.html_url}`);
+            }
+
+            core.setOutput('pr_url',    pr.html_url);
+            core.setOutput('pr_number', String(pr.number));
+
+      # ── 10. Авто-мердж (только при explicit auto_merge=true) ─────────────────
+      - name: Auto-merge PR
+        if: >-
+          steps.check.outputs.synced == 'true' &&
+          steps.rebase.outputs.status == 'success' &&
+          inputs.dry_run != 'true' &&
+          inputs.auto_merge == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const prNumber = parseInt('${{ steps.pr.outputs.pr_number }}', 10);
+            await github.rest.pulls.merge({
+              owner:        context.repo.owner,
+              repo:         context.repo.repo,
+              pull_number:  prNumber,
+              merge_method: 'rebase',
+            });
+            core.info(`Auto-merged PR #${prNumber} via rebase`);
+
+      # ── 11. Финальный отчёт ───────────────────────────────────────────────────
       - name: Sync report
         if: steps.check.outputs.synced == 'true'
         run: |
           DRY=""
-          if [[ "${{ inputs.dry_run }}" == "true" ]]; then DRY=" (DRY RUN)"; fi
+          [[ "${{ inputs.dry_run }}" == "true" ]] && DRY=" (DRY RUN)"
           echo "================================================"
           echo "  UPSTREAM SYNC -- $(date -u '+%Y-%m-%d %H:%M UTC')"
           echo "================================================"
-          echo "  Status          : SYNCED${DRY}"
-          echo "  upstream/main   : ${{ steps.check.outputs.upstream_sha }}"
-          echo "  origin/main was : ${{ steps.check.outputs.origin_sha_old }}"
-          echo "  origin/main now : ${{ steps.rebase.outputs.origin_sha_new }}"
-          echo "  Commits absorbed: ${{ steps.check.outputs.commits_ahead }}"
+          echo "  Status         : SYNCED${DRY}"
+          echo "  upstream/main  : ${{ steps.check.outputs.upstream_sha }}"
+          echo "  Sync branch    : ${{ steps.branch.outputs.sync_branch }}"
+          echo "  Commits        : ${{ steps.check.outputs.commits_ahead }}"
+          [[ -n "${{ steps.pr.outputs.pr_url }}" ]] && \
+            echo "  PR             : ${{ steps.pr.outputs.pr_url }}"
           echo "================================================"
-
-  # ── VPS Deploy (опционально — если настроен VPS_SSH_KEY) ─────────────────────
-  vps-deploy:
-    name: Deploy to VPS
-    needs: sync
-    runs-on: ubuntu-latest
-    # Запускается только если sync успешен, не dry_run, и в репо есть SSH-секреты
-    if: >-
-      needs.sync.outputs.synced == 'true' &&
-      needs.sync.outputs.rebase_status == 'success' &&
-      github.event.inputs.dry_run != 'true'
-    steps:
-      - name: Check VPS secrets
-        id: vps_check
-        env:
-          HAS_KEY:  ${{ secrets.VPS_SSH_KEY != '' }}
-          HAS_HOST: ${{ secrets.VPS_HOST != '' }}
-          HAS_USER: ${{ secrets.VPS_USER != '' }}
-        run: |
-          if [[ "$HAS_KEY" == "true" && "$HAS_HOST" == "true" && "$HAS_USER" == "true" ]]; then
-            echo "available=true" >> "$GITHUB_OUTPUT"
-            echo "VPS secrets found — will deploy."
-          else
-            echo "available=false" >> "$GITHUB_OUTPUT"
-            echo "VPS_SSH_KEY / VPS_HOST / VPS_USER not set."
-            echo "Skipping automated VPS deploy."
-            echo "To deploy manually: ssh to VPS and run scripts/vps_deploy_safe.sh"
-          fi
-
-      - name: SSH deploy to VPS
-        if: steps.vps_check.outputs.available == 'true'
-        env:
-          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
-          VPS_HOST:    ${{ secrets.VPS_HOST }}
-          VPS_USER:    ${{ secrets.VPS_USER }}
-        run: |
-          install -m 600 /dev/null /tmp/vps_key
-          printf '%s' "$VPS_SSH_KEY" > /tmp/vps_key
-
-          ssh -i /tmp/vps_key \
-              -o StrictHostKeyChecking=no \
-              -o ConnectTimeout=30 \
-              -o BatchMode=yes \
-              "${VPS_USER}@${VPS_HOST}" \
-              'bash /opt/openclaw/app/scripts/vps_deploy_safe.sh \
-                 --app-dir /opt/openclaw/app \
-                 --ref origin/main \
-                 --healthcheck-script /opt/openclaw/scripts/health_check_openclaw.sh'
-
-          rm -f /tmp/vps_key
 
   # ── Telegram уведомление ──────────────────────────────────────────────────────
   notify:
     name: Telegram notification
-    needs: [sync, vps-deploy]
+    needs: sync
     runs-on: ubuntu-latest
     if: always()
+    permissions: {}
     steps:
       - name: Send Telegram notification
         env:
           BOT_TOKEN:     ${{ secrets.TELEGRAM_BOT_TOKEN }}
           CHAT_ID:       ${{ secrets.TELEGRAM_CHAT_ID }}
           SYNC_RESULT:   ${{ needs.sync.result }}
-          DEPLOY_RESULT: ${{ needs.vps-deploy.result }}
           SYNCED:        ${{ needs.sync.outputs.synced }}
           COMMITS:       ${{ needs.sync.outputs.commits_ahead }}
-          SHA_NEW:       ${{ needs.sync.outputs.origin_sha_new }}
           UPSTREAM_SHA:  ${{ needs.sync.outputs.upstream_sha }}
+          SYNC_BRANCH:   ${{ needs.sync.outputs.sync_branch }}
+          REBASE_STATUS: ${{ needs.sync.outputs.rebase_status }}
+          PR_URL:        ${{ needs.sync.outputs.pr_url }}
         run: |
           if [[ -z "$BOT_TOKEN" || -z "$CHAT_ID" ]]; then
             echo "TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID not configured — skipping."
@@ -255,25 +310,23 @@ jobs:
           DATE=$(date -u '+%Y-%m-%d %H:%M UTC')
           RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
 
-          build_msg() {
-            if [[ "$SYNC_RESULT" == "success" && "$SYNCED" == "false" ]]; then
-              printf '✅ Upstream Sync\n%s\nАктуально — новых коммитов нет.' "$DATE"
-            elif [[ "$SYNC_RESULT" == "success" && "$SYNCED" == "true" ]]; then
-              DEPLOY_LINE=""
-              case "$DEPLOY_RESULT" in
-                success) DEPLOY_LINE="\n🚀 VPS: задеплоено успешно" ;;
-                skipped) DEPLOY_LINE="\n⏭ VPS: пропущено (нет SSH-секретов)" ;;
-                failure) DEPLOY_LINE="\n❌ VPS: ошибка деплоя" ;;
-              esac
-              printf '🔄 Upstream Sync\n%s\nАбсорбировано: %s коммитов\nHEAD: %s%s\nЛог: %s' \
-                "$DATE" "$COMMITS" "${SHA_NEW:0:12}" "$DEPLOY_LINE" "$RUN_URL"
-            else
-              printf '❌ Upstream Sync — ошибка\n%s\nsync: %s\nЛог: %s' \
-                "$DATE" "$SYNC_RESULT" "$RUN_URL"
-            fi
-          }
+          if [[ "$SYNC_RESULT" == "success" && "$SYNCED" == "false" ]]; then
+            TEXT="$(printf '\u2705 Upstream Sync\n%s\n\u0410\u043a\u0442\u0443\u0430\u043b\u044c\u043d\u043e \u2014 \u043d\u043e\u0432\u044b\u0445 \u043a\u043e\u043c\u043c\u0438\u0442\u043e\u0432 \u043d\u0435\u0442.' "$DATE")"
 
-          TEXT=$(build_msg)
+          elif [[ "$SYNC_RESULT" == "success" && "$SYNCED" == "true" ]]; then
+            PR_LINE=""
+            [[ -n "$PR_URL" ]] && PR_LINE="$(printf '\nPR: %s' "$PR_URL")"
+            TEXT="$(printf '\U0001f504 Upstream Sync\n%s\n\u0410\u0431\u0441\u043e\u0440\u0431\u0438\u0440\u043e\u0432\u0430\u043d\u043e: %s \u043a\u043e\u043c\u043c\u0438\u0442\u043e\u0432\nUpstream: %s\n\u0412\u0435\u0442\u043a\u0430: %s%s\n\u041b\u043e\u0433: %s' \
+              "$DATE" "$COMMITS" "${UPSTREAM_SHA:0:12}" "$SYNC_BRANCH" "$PR_LINE" "$RUN_URL")"
+
+          elif [[ "$REBASE_STATUS" == "conflict" ]]; then
+            TEXT="$(printf '\u26a0\ufe0f Upstream Sync \u2014 \u041a\u041e\u041d\u0424\u041b\u0418\u041a\u0422\n%s\nRebase \u0437\u0430\u0432\u0435\u0440\u0448\u0438\u043b\u0441\u044f \u0441 \u043a\u043e\u043d\u0444\u043b\u0438\u043a\u0442\u043e\u043c.\n\u0422\u0440\u0435\u0431\u0443\u0435\u0442\u0441\u044f \u0440\u0443\u0447\u043d\u043e\u0435 \u0432\u043c\u0435\u0448\u0430\u0442\u0435\u043b\u044c\u0441\u0442\u0432\u043e.\n\u041b\u043e\u0433: %s' \
+              "$DATE" "$RUN_URL")"
+
+          else
+            TEXT="$(printf '\u274c Upstream Sync \u2014 \u043e\u0448\u0438\u0431\u043a\u0430\n%s\nsync: %s\n\u041b\u043e\u0433: %s' \
+              "$DATE" "$SYNC_RESULT" "$RUN_URL")"
+          fi
 
           curl -sS -X POST \
             "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
