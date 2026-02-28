@@ -1,0 +1,90 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# vps-deploy.yml — деплой на VPS после merge в main или вручную
+#
+# Триггеры:
+#   - push в main (только если изменились не только docs/markdown)
+#   - workflow_dispatch с опциональным ref
+#
+# Секреты (Settings → Secrets and variables → Actions):
+#   VPS_SSH_KEY  — приватный SSH-ключ для VPS
+#   VPS_HOST     — IP/hostname VPS
+#   VPS_USER     — SSH-пользователь на VPS
+# ──────────────────────────────────────────────────────────────────────────────
+
+name: VPS Deploy
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - 'docs/**'
+      - '**/*.md'
+      - '**/*.mdx'
+      - '.github/ISSUE_TEMPLATE/**'
+      - '.github/FUNDING.yml'
+      - '.github/labeler.yml'
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 'Git ref для деплоя (default: origin/main)'
+        required: false
+        default: 'origin/main'
+
+# Предотвращаем параллельные деплои
+concurrency:
+  group: vps-deploy
+  cancel-in-progress: false
+
+# Никаких прав к GitHub API не нужно
+permissions: {}
+
+jobs:
+  deploy:
+    name: Deploy to VPS
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - name: Check VPS secrets
+        id: vps_check
+        env:
+          HAS_KEY:  ${{ secrets.VPS_SSH_KEY != '' }}
+          HAS_HOST: ${{ secrets.VPS_HOST != '' }}
+          HAS_USER: ${{ secrets.VPS_USER != '' }}
+        run: |
+          if [[ "$HAS_KEY" == "true" && "$HAS_HOST" == "true" && "$HAS_USER" == "true" ]]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+            echo "VPS secrets found — will deploy."
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "VPS_SSH_KEY / VPS_HOST / VPS_USER not configured."
+            echo "To deploy manually: ssh to VPS and run scripts/vps_deploy_safe.sh"
+          fi
+
+      - name: SSH deploy to VPS
+        if: steps.vps_check.outputs.available == 'true'
+        env:
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          VPS_HOST:    ${{ secrets.VPS_HOST }}
+          VPS_USER:    ${{ secrets.VPS_USER }}
+          DEPLOY_REF:  ${{ inputs.ref || 'origin/main' }}
+        run: |
+          install -m 600 /dev/null /tmp/vps_key
+          printf '%s' "$VPS_SSH_KEY" > /tmp/vps_key
+
+          ssh -i /tmp/vps_key \
+              -o StrictHostKeyChecking=no \
+              -o ConnectTimeout=30 \
+              -o BatchMode=yes \
+              "${VPS_USER}@${VPS_HOST}" \
+              "bash /opt/openclaw/app/scripts/vps_deploy_safe.sh \
+                 --app-dir /opt/openclaw/app \
+                 --ref '${DEPLOY_REF}' \
+                 --healthcheck-script /opt/openclaw/scripts/health_check_openclaw.sh"
+
+          rm -f /tmp/vps_key
+
+      - name: Skip — VPS secrets not configured
+        if: steps.vps_check.outputs.available == 'false'
+        run: |
+          echo "Skipping VPS deploy — secrets not configured."
+          echo "Configure VPS_SSH_KEY, VPS_HOST, VPS_USER in GitHub repository secrets."
