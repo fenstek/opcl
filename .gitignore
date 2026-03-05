@@ -125,3 +125,4 @@ dist/protocol.schema.json
 *.bak_*
 *.bak*
 reports/
+compose.rendered.yml

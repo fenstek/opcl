@@ -1,0 +1,8 @@
+Host opcl
+  HostName 172.19.0.1
+  User opcl
+  IdentityFile /home/node/.ssh/id_ed25519_utildesk_openclaw
+  IdentitiesOnly yes
+  UserKnownHostsFile /home/node/.ssh/known_hosts
+  BatchMode yes
+  StrictHostKeyChecking yes

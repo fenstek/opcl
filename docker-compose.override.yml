@@ -1,33 +1,53 @@
-services:
-  openclaw-gateway:
-    build:
-      context: .
-      args:
-        OPENCLAW_INSTALL_BROWSER: "1"
-        OPENCLAW_DOCKER_APT_PACKAGES: "jq"
-    image: openclaw:local
-    ports:
-      - "127.0.0.1:28789:18789"
-      - "127.0.0.1:28790:18791"
-    environment:
-      SEARXNG_BASE_URL: ${SEARXNG_BASE_URL:-http://searxng:8080}
-    volumes:
-      # utildesk-openclaw: SSH key (ro), known_hosts (ro), wrapper script (ro)
-      - /home/opcl/.ssh/id_ed25519_utildesk_openclaw:/home/node/.ssh/id_ed25519_utildesk_openclaw:ro
-      - /home/opcl/.ssh/id_ed25519_utildesk_openclaw.pub:/home/node/.ssh/id_ed25519_utildesk_openclaw.pub:ro
-      - /opt/openclaw/scripts/ssh/known_hosts:/home/node/.ssh/known_hosts:ro
-      - /opt/openclaw/scripts/utildesk_ssh.sh:/usr/local/bin/utildesk_ssh:ro
-    networks:
-      - default
-      - openclaw-tools
-    # Memory cap: prevents Chromium renderer tab leak from OOM-ing the host.
-    # VPS has 4GB total; 2.8GB gives gateway+Chromium enough room, leaves ~1.2GB for other containers.
-    mem_limit: 2800m
-    memswap_limit: 2800m
-
-  openclaw-cli:
-    image: openclaw:local
-
 networks:
   openclaw-tools:
     external: true
+services:
+  openclaw-cli:
+    image: openclaw:persist-20260302_012020
+    pull_policy: never
+  openclaw-gateway:
+    build:
+      args:
+        OPENCLAW_DOCKER_APT_PACKAGES: jq
+        OPENCLAW_INSTALL_BROWSER: '1'
+      context: .
+    environment:
+      N8N_API_KEY: ${N8N_API_KEY}
+      N8N_API_URL: https://n8n.utildesk.de
+      NOTION_TOKEN: ${NOTION_TOKEN}
+      NOTION_API_KEY: ${NOTION_API_KEY}
+      SEARXNG_BASE_URL: ${SEARXNG_BASE_URL:-http://searxng:8080}
+      NODE_OPTIONS: --max-old-space-size=2048
+    image: openclaw:persist-20260302_012020
+    pull_policy: never
+    mem_limit: 2800m
+    mem_reservation: 1536m
+    memswap_limit: 2800m
+    pids_limit: 512
+    ulimits:
+      nofile:
+        soft: 8192
+        hard: 16384
+    networks:
+    - default
+    - openclaw-tools
+    ports:
+    - 127.0.0.1:28789:18789
+    - 127.0.0.1:28790:18791
+    volumes:
+    - /home/opcl/.ssh/id_ed25519_utildesk_openclaw:/home/node/.ssh/id_ed25519_utildesk_openclaw:ro
+    - /home/opcl/.ssh/id_ed25519_utildesk_openclaw.pub:/home/node/.ssh/id_ed25519_utildesk_openclaw.pub:ro
+    - /opt/openclaw/scripts/ssh/known_hosts:/home/node/.ssh/known_hosts:ro
+    - /opt/openclaw/scripts/ssh/config:/home/node/.ssh/config:ro
+    - /opt/openclaw/scripts/utildesk_ssh.sh:/usr/local/bin/utildesk_ssh:ro
+    - /opt/openclaw/scripts/opcl_self.sh:/usr/local/bin/openclaw_self:ro
+    - /opt/openclaw/scripts/host/host_ssh.sh:/usr/local/bin/host_ssh:ro
+    - /opt/openclaw/patches/favicon.svg:/app/dist/control-ui/favicon.svg:ro
+    - /opt/openclaw/patches/favicon-32.png:/app/dist/control-ui/favicon-32.png:ro
+    - /opt/openclaw/patches/apple-touch-icon.png:/app/dist/control-ui/apple-touch-icon.png:ro
+    - /opt/openclaw/patches/favicon.ico:/app/dist/control-ui/favicon.ico:ro
+    - /opt/openclaw/patches/index.html:/app/dist/control-ui/index.html:ro
+    - /opt/openclaw/patches/assets/index-C_C6XOMD.js:/app/dist/control-ui/assets/index-C_C6XOMD.js:ro
+    - /opt/openclaw/scripts/whisper_transcribe.sh:/usr/local/bin/whisper_transcribe:ro
+    - /opt/openclaw/scripts/silero_tts.sh:/usr/local/bin/silero_tts:ro
+    - /opt/openclaw/scripts/silero_tts.py:/opt/openclaw/scripts/silero_tts.py:ro

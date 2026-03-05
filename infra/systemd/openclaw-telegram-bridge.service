@@ -1,0 +1,21 @@
+[Unit]
+Description=OpenClaw Telegram Bridge
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=opcl
+WorkingDirectory=/opt/openclaw/bridge
+EnvironmentFile=/opt/openclaw/bridge/.env
+ExecStart=/usr/bin/node /opt/openclaw/bridge/bridge.mjs
+Restart=always
+RestartSec=5
+StartLimitIntervalSec=60
+StartLimitBurst=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=oc-tg-bridge
+
+[Install]
+WantedBy=multi-user.target

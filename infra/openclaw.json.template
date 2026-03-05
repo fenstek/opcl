@@ -1,0 +1,624 @@
+{
+  "env": {
+    "N8N_API_URL": "https://n8n.utildesk.de",
+    "N8N_API_KEY": "${N8N_API_KEY}",
+    "NOTION_API_KEY": "${NOTION_API_KEY}",
+    "GEMINI_API_KEY": "${GEMINI_API_KEY}",
+    "OPENROUTER_API_KEY": "${OPENROUTER_API_KEY}",
+    "OPENROUTER_MANAGEMENT_KEY": "${OPENROUTER_MANAGEMENT_KEY}"
+  },
+  "browser": {
+    "executablePath": "/home/node/.cache/ms-playwright/chromium-1208/chrome-linux64/chrome",
+    "headless": true,
+    "noSandbox": true,
+    "defaultProfile": "openclaw"
+  },
+  "auth": {
+    "profiles": {
+      "openai-codex:default": {
+        "provider": "openai-codex",
+        "mode": "oauth"
+      },
+      "anthropic:default": {
+        "provider": "anthropic",
+        "mode": "token"
+      },
+      "qwen-portal:default": {
+        "provider": "qwen-portal",
+        "mode": "oauth"
+      }
+    }
+  },
+  "models": {
+    "providers": {
+      "qwen-portal": {
+        "baseUrl": "https://portal.qwen.ai/v1",
+        "apiKey": "qwen-oauth",
+        "api": "openai-completions",
+        "models": [
+          {
+            "id": "coder-model",
+            "name": "Qwen Coder",
+            "reasoning": false,
+            "input": [
+              "text"
+            ],
+            "cost": {
+              "input": 0,
+              "output": 0,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 128000,
+            "maxTokens": 8192
+          },
+          {
+            "id": "vision-model",
+            "name": "Qwen Vision",
+            "reasoning": false,
+            "input": [
+              "text",
+              "image"
+            ],
+            "cost": {
+              "input": 0,
+              "output": 0,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 128000,
+            "maxTokens": 8192
+          }
+        ]
+      },
+      "google": {
+        "baseUrl": "https://generativelanguage.googleapis.com/v1beta/openai",
+        "apiKey": "<<REDACTED>>",
+        "api": "openai-completions",
+        "models": [
+          {
+            "id": "gemini-2.5-flash",
+            "name": "Gemini 2.5 Flash",
+            "reasoning": false,
+            "input": [
+              "text",
+              "image"
+            ],
+            "cost": {
+              "input": 0,
+              "output": 0,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 1048576,
+            "maxTokens": 65536
+          },
+          {
+            "id": "gemini-2.0-flash",
+            "name": "Gemini 2.0 Flash",
+            "reasoning": false,
+            "input": [
+              "text",
+              "image"
+            ],
+            "cost": {
+              "input": 0,
+              "output": 0,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 1048576,
+            "maxTokens": 8192
+          },
+          {
+            "id": "gemini-2.5-pro",
+            "name": "Gemini 2.5 Pro",
+            "reasoning": true,
+            "input": [
+              "text",
+              "image"
+            ],
+            "cost": {
+              "input": 0,
+              "output": 0,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 1048576,
+            "maxTokens": 65536
+          }
+        ]
+      },
+      "groq": {
+        "baseUrl": "https://api.groq.com/openai/v1",
+        "apiKey": "",
+        "api": "openai-completions",
+        "models": [
+          {
+            "id": "meta-llama/llama-3.3-70b-versatile",
+            "name": "Groq Llama 3.3 70B",
+            "reasoning": false,
+            "input": [
+              "text"
+            ],
+            "cost": {
+              "input": 0,
+              "output": 0,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 131072,
+            "maxTokens": 8192
+          },
+          {
+            "id": "qwen/qwen3-32b",
+            "name": "Groq Qwen3 32B",
+            "reasoning": false,
+            "input": [
+              "text"
+            ],
+            "cost": {
+              "input": 0,
+              "output": 0,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 131072,
+            "maxTokens": 8192
+          }
+        ]
+      },
+      "openrouter": {
+        "baseUrl": "https://openrouter.ai/api/v1",
+        "apiKey": "<<REDACTED>>",
+        "api": "openai-completions",
+        "models": [
+          {
+            "id": "meta-llama/llama-3.3-70b-instruct:free",
+            "name": "Llama 3.3 70B (free)",
+            "reasoning": false,
+            "input": [
+              "text"
+            ],
+            "cost": {
+              "input": 0,
+              "output": 0,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 131072,
+            "maxTokens": 8192
+          },
+          {
+            "id": "qwen/qwen3-coder:free",
+            "name": "Qwen3 Coder (free)",
+            "reasoning": false,
+            "input": [
+              "text"
+            ],
+            "cost": {
+              "input": 0,
+              "output": 0,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 131072,
+            "maxTokens": 8192
+          },
+          {
+            "id": "openai/gpt-oss-120b:free",
+            "name": "GPT OSS 120B (free)",
+            "reasoning": false,
+            "input": [
+              "text"
+            ],
+            "cost": {
+              "input": 0,
+              "output": 0,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 131072,
+            "maxTokens": 8192
+          },
+          {
+            "id": "google/gemma-3-27b-it:free",
+            "name": "Gemma 3 27B (free)",
+            "reasoning": false,
+            "input": [
+              "text",
+              "image"
+            ],
+            "cost": {
+              "input": 0,
+              "output": 0,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 131072,
+            "maxTokens": 8192
+          },
+          {
+            "id": "mistralai/mistral-small-3.1-24b-instruct:free",
+            "name": "Mistral Small 3.1 24B (free)",
+            "reasoning": false,
+            "input": [
+              "text"
+            ],
+            "cost": {
+              "input": 0,
+              "output": 0,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 131072,
+            "maxTokens": 8192
+          },
+          {
+            "id": "qwen/qwen3-next-80b-a3b-instruct:free",
+            "name": "Qwen3 80B A3B (free)",
+            "reasoning": false,
+            "input": [
+              "text"
+            ],
+            "cost": {
+              "input": 0,
+              "output": 0,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 131072,
+            "maxTokens": 8192
+          }
+        ]
+      }
+    }
+  },
+  "agents": {
+    "defaults": {
+      "model": {
+        "primary": "openai-codex/gpt-5.3-codex",
+        "fallbacks": [
+          "anthropic/claude-sonnet-4-6",
+          "google/gemini-2.5-flash",
+          "openrouter/meta-llama/llama-3.3-70b-instruct:free",
+          "openrouter/qwen/qwen3-coder:free",
+          "openrouter/openai/gpt-oss-120b:free",
+          "openrouter/google/gemma-3-27b-it:free",
+          "qwen-portal/coder-model",
+          "google/gemini-2.0-flash"
+        ]
+      },
+      "models": {
+        "anthropic/claude-sonnet-4-6": {
+          "alias": "claude-sonnet"
+        },
+        "anthropic/claude-opus-4-5": {
+          "alias": "claude-opus"
+        },
+        "anthropic/claude-haiku-4-5": {
+          "alias": "claude-haiku"
+        },
+        "google/gemini-2.5-flash": {
+          "alias": "gemini-2.5-flash"
+        },
+        "google/gemini-2.0-flash": {
+          "alias": "gemini-2.0-flash"
+        },
+        "google/gemini-2.5-pro": {
+          "alias": "gemini-2.5-pro"
+        },
+        "qwen-portal/coder-model": {
+          "alias": "qwen-coder"
+        },
+        "qwen-portal/vision-model": {
+          "alias": "qwen-vision"
+        },
+        "openrouter/meta-llama/llama-3.3-70b-instruct:free": {
+          "alias": "or-llama-free"
+        },
+        "openrouter/qwen/qwen3-coder:free": {
+          "alias": "or-qwen-coder"
+        },
+        "openrouter/openai/gpt-oss-120b:free": {
+          "alias": "or-gpt120b-free"
+        },
+        "openrouter/google/gemma-3-27b-it:free": {
+          "alias": "or-gemma-free"
+        },
+        "openrouter/qwen/qwen3-next-80b-a3b-instruct:free": {
+          "alias": "or-qwen80b-free"
+        },
+        "groq/meta-llama/llama-3.3-70b-versatile": {
+          "alias": "groq-llama"
+        },
+        "groq/qwen/qwen3-32b": {
+          "alias": "groq-qwen"
+        }
+      },
+      "workspace": "/home/node/.openclaw/workspace",
+      "memorySearch": {
+        "sources": [
+          "memory",
+          "sessions"
+        ],
+        "experimental": {
+          "sessionMemory": true
+        }
+      },
+      "contextPruning": {
+        "mode": "cache-ttl",
+        "ttl": "1h"
+      },
+      "compaction": {
+        "mode": "safeguard",
+        "reserveTokensFloor": 20000
+      },
+      "heartbeat": {
+        "every": "1h"
+      }
+    },
+    "list": [
+      {
+        "id": "main",
+        "name": "Codex",
+        "workspace": "/home/node/.openclaw/workspace",
+        "model": "openai-codex/gpt-5.3-codex"
+      },
+      {
+        "id": "claude",
+        "name": "Claude",
+        "workspace": "/home/node/.openclaw/workspace",
+        "model": {
+          "primary": "anthropic/claude-sonnet-4-6",
+          "fallbacks": [
+            "google/gemini-2.5-flash",
+            "openrouter/meta-llama/llama-3.3-70b-instruct:free",
+            "openrouter/qwen/qwen3-coder:free",
+            "openrouter/openai/gpt-oss-120b:free",
+            "openrouter/google/gemma-3-27b-it:free",
+            "qwen-portal/coder-model",
+            "google/gemini-2.0-flash"
+          ]
+        }
+      },
+      {
+        "id": "qwen",
+        "name": "Qwen",
+        "workspace": "/home/node/.openclaw/workspace",
+        "model": {
+          "primary": "google/gemini-2.5-flash",
+          "fallbacks": [
+            "google/gemini-2.0-flash"
+          ]
+        }
+      }
+    ]
+  },
+  "tools": {
+    "web": {
+      "search": {}
+    }
+  },
+  "bindings": [
+    {
+      "agentId": "main",
+      "match": {
+        "channel": "telegram",
+        "accountId": "default"
+      }
+    },
+    {
+      "agentId": "claude",
+      "match": {
+        "channel": "telegram",
+        "accountId": "claude"
+      }
+    },
+    {
+      "agentId": "qwen",
+      "match": {
+        "channel": "telegram",
+        "accountId": "qwen"
+      }
+    },
+    {
+      "agentId": "main",
+      "match": {
+        "channel": "matrix",
+        "accountId": "codex"
+      }
+    },
+    {
+      "agentId": "claude",
+      "match": {
+        "channel": "matrix",
+        "accountId": "claude"
+      }
+    },
+    {
+      "agentId": "qwen",
+      "match": {
+        "channel": "matrix",
+        "accountId": "qwen"
+      }
+    }
+  ],
+  "commands": {
+    "native": "auto",
+    "nativeSkills": "auto",
+    "restart": true,
+    "ownerDisplay": "raw"
+  },
+  "session": {
+    "dmScope": "per-channel-peer"
+  },
+  "channels": {
+    "telegram": {
+      "enabled": true,
+      "dmPolicy": "open",
+      "groups": {
+        "*": {
+          "requireMention": false,
+          "groupPolicy": "open"
+        }
+      },
+      "allowFrom": [
+        "*"
+      ],
+      "groupPolicy": "allowlist",
+      "streaming": "off",
+      "accounts": {
+        "default": {
+          "name": "Codex bot",
+          "dmPolicy": "pairing",
+          "botToken": "<<REDACTED>>",
+          "groups": {
+            "-5297223318": {
+              "requireMention": false,
+              "groupPolicy": "open"
+            },
+            "-5230511906": {
+              "requireMention": false,
+              "groupPolicy": "open"
+            }
+          },
+          "groupPolicy": "allowlist",
+          "streaming": "off"
+        },
+        "claude": {
+          "name": "Claude bot",
+          "dmPolicy": "pairing",
+          "botToken": "<<REDACTED>>",
+          "groups": {
+            "-5297223318": {
+              "requireMention": false,
+              "groupPolicy": "open"
+            },
+            "-5230511906": {
+              "requireMention": false,
+              "groupPolicy": "open"
+            }
+          },
+          "groupPolicy": "allowlist",
+          "streaming": "off"
+        },
+        "qwen": {
+          "name": "Qwen bot",
+          "dmPolicy": "pairing",
+          "botToken": "<<REDACTED>>",
+          "groups": {
+            "-5297223318": {
+              "requireMention": false,
+              "groupPolicy": "open"
+            },
+            "-5230511906": {
+              "requireMention": false,
+              "groupPolicy": "open"
+            }
+          },
+          "groupPolicy": "allowlist",
+          "streaming": "off"
+        }
+      }
+    },
+    "matrix": {
+      "enabled": true,
+      "groups": {
+        "*": {
+          "requireMention": false
+        }
+      },
+      "dm": {
+        "policy": "pairing"
+      },
+      "accounts": {
+        "codex": {
+          "name": "Codex Matrix",
+          "homeserver": "https://matrix.utildesk.de",
+          "accessToken": "<<REDACTED>>",
+          "groupPolicy": "open",
+          "groups": {
+            "*": {
+              "requireMention": false
+            }
+          },
+          "encryption": true
+        },
+        "claude": {
+          "name": "Claude Matrix",
+          "homeserver": "https://matrix.utildesk.de",
+          "accessToken": "<<REDACTED>>",
+          "groupPolicy": "open",
+          "groups": {
+            "*": {
+              "requireMention": false
+            }
+          },
+          "encryption": true
+        },
+        "default": {
+          "groupPolicy": "open"
+        },
+        "qwen": {
+          "name": "Qwen Matrix",
+          "homeserver": "https://matrix.utildesk.de",
+          "accessToken": "<<REDACTED>>",
+          "groupPolicy": "open",
+          "groups": {
+            "*": {
+              "requireMention": false
+            }
+          },
+          "encryption": true
+        }
+      },
+      "encryption": true
+    }
+  },
+  "gateway": {
+    "port": 18789,
+    "mode": "local",
+    "bind": "lan",
+    "controlUi": {
+      "dangerouslyAllowHostHeaderOriginFallback": true
+    },
+    "auth": {
+      "mode": "token",
+      "token": "<<REDACTED>>"
+    },
+    "tailscale": {
+      "mode": "off",
+      "resetOnExit": false
+    }
+  },
+  "skills": {
+    "entries": {
+      "notion": {
+        "apiKey": "<<REDACTED>>"
+      }
+    }
+  },
+  "plugins": {
+    "entries": {
+      "qwen-portal-auth": {
+        "enabled": true
+      },
+      "acpx": {
+        "enabled": true
+      },
+      "matrix": {
+        "enabled": true
+      }
+    },
+    "installs": {
+      "matrix": {
+        "source": "path",
+        "sourcePath": "/app/extensions/matrix",
+        "installPath": "/home/node/.openclaw/extensions/matrix",
+        "version": "2026.2.26",
+        "installedAt": "2026-03-04T08:12:12.744Z"
+      }
+    }
+  }
+}

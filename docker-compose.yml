@@ -11,8 +11,19 @@ services:
     volumes:
       - ${OPENCLAW_CONFIG_DIR}:/home/node/.openclaw
       - ${OPENCLAW_WORKSPACE_DIR}:/home/node/.openclaw/workspace
+    ports:
+      - "127.0.0.1:28789:18789"
+    healthcheck:
+      test: ["CMD", "sh", "-c", "curl -sf http://127.0.0.1:18789/ > /dev/null"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
     init: true
     restart: unless-stopped
+    networks:
+      - default
+      - openclaw-tools
     command:
       [
         "node",
@@ -41,3 +52,8 @@ services:
     tty: true
     init: true
     entrypoint: ["node", "dist/index.js"]
+
+networks:
+  default:
+  openclaw-tools:
+    external: true

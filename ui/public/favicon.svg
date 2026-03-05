@@ -1,22 +1,59 @@
 <svg viewBox="0 0 120 120" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <defs>
-    <linearGradient id="lobster-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#ff4d4d"/>
-      <stop offset="100%" stop-color="#991b1b"/>
-    </linearGradient>
-  </defs>
-  <!-- Body -->
-  <path d="M60 10 C30 10 15 35 15 55 C15 75 30 95 45 100 L45 110 L55 110 L55 100 C55 100 60 102 65 100 L65 110 L75 110 L75 100 C90 95 105 75 105 55 C105 35 90 10 60 10Z" fill="url(#lobster-gradient)"/>
-  <!-- Left Claw -->
-  <path d="M20 45 C5 40 0 50 5 60 C10 70 20 65 25 55 C28 48 25 45 20 45Z" fill="url(#lobster-gradient)"/>
-  <!-- Right Claw -->
-  <path d="M100 45 C115 40 120 50 115 60 C110 70 100 65 95 55 C92 48 95 45 100 45Z" fill="url(#lobster-gradient)"/>
-  <!-- Antenna -->
-  <path d="M45 15 Q35 5 30 8" stroke="#ff4d4d" stroke-width="3" stroke-linecap="round"/>
-  <path d="M75 15 Q85 5 90 8" stroke="#ff4d4d" stroke-width="3" stroke-linecap="round"/>
+  <!-- Crab emoji-style SVG 🦀 -->
+
+  <!-- Body (main shell) -->
+  <ellipse cx="60" cy="65" rx="32" ry="24" fill="#E8472A"/>
+
+  <!-- Shell texture (highlight) -->
+  <ellipse cx="60" cy="60" rx="26" ry="18" fill="#F05C3A" opacity="0.6"/>
+  <ellipse cx="60" cy="56" rx="18" ry="11" fill="#F47050" opacity="0.4"/>
+
+  <!-- Head -->
+  <ellipse cx="60" cy="44" rx="18" ry="13" fill="#E8472A"/>
+
+  <!-- Eyes stalks -->
+  <rect x="46" y="30" width="4" height="10" rx="2" fill="#C0392B"/>
+  <rect x="70" y="30" width="4" height="10" rx="2" fill="#C0392B"/>
+
   <!-- Eyes -->
-  <circle cx="45" cy="35" r="6" fill="#050810"/>
-  <circle cx="75" cy="35" r="6" fill="#050810"/>
-  <circle cx="46" cy="34" r="2.5" fill="#00e5cc"/>
-  <circle cx="76" cy="34" r="2.5" fill="#00e5cc"/>
+  <circle cx="48" cy="29" r="6" fill="#1a1a1a"/>
+  <circle cx="72" cy="29" r="6" fill="#1a1a1a"/>
+  <circle cx="49.5" cy="27.5" r="2" fill="white"/>
+  <circle cx="73.5" cy="27.5" r="2" fill="white"/>
+
+  <!-- Left big claw -->
+  <g transform="rotate(-20, 30, 55)">
+    <rect x="10" y="48" width="22" height="10" rx="5" fill="#E8472A"/>
+    <!-- Claw pincer top -->
+    <path d="M10 48 Q2 42 5 35 Q10 30 18 36 L18 48Z" fill="#D44025"/>
+    <!-- Claw pincer bottom -->
+    <path d="M10 58 Q2 64 5 71 Q10 76 18 70 L18 58Z" fill="#D44025"/>
+  </g>
+
+  <!-- Right big claw -->
+  <g transform="rotate(20, 90, 55)">
+    <rect x="88" y="48" width="22" height="10" rx="5" fill="#E8472A"/>
+    <!-- Claw pincer top -->
+    <path d="M110 48 Q118 42 115 35 Q110 30 102 36 L102 48Z" fill="#D44025"/>
+    <!-- Claw pincer bottom -->
+    <path d="M110 58 Q118 64 115 71 Q110 76 102 70 L102 58Z" fill="#D44025"/>
+  </g>
+
+  <!-- Left legs (3 legs) -->
+  <line x1="28" y1="62" x2="14" y2="72" stroke="#C0392B" stroke-width="4" stroke-linecap="round"/>
+  <line x1="28" y1="68" x2="12" y2="82" stroke="#C0392B" stroke-width="4" stroke-linecap="round"/>
+  <line x1="30" y1="75" x2="16" y2="88" stroke="#C0392B" stroke-width="4" stroke-linecap="round"/>
+
+  <!-- Right legs (3 legs) -->
+  <line x1="92" y1="62" x2="106" y2="72" stroke="#C0392B" stroke-width="4" stroke-linecap="round"/>
+  <line x1="92" y1="68" x2="108" y2="82" stroke="#C0392B" stroke-width="4" stroke-linecap="round"/>
+  <line x1="90" y1="75" x2="104" y2="88" stroke="#C0392B" stroke-width="4" stroke-linecap="round"/>
+
+  <!-- Mouth / smile -->
+  <path d="M52 50 Q60 56 68 50" stroke="#C0392B" stroke-width="2.5" stroke-linecap="round" fill="none"/>
+
+  <!-- Shell dots -->
+  <circle cx="60" cy="68" r="3" fill="#D44025" opacity="0.5"/>
+  <circle cx="50" cy="72" r="2" fill="#D44025" opacity="0.4"/>
+  <circle cx="70" cy="72" r="2" fill="#D44025" opacity="0.4"/>
 </svg>

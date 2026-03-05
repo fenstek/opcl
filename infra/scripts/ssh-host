@@ -1,0 +1,4 @@
+#!/bin/bash
+# SSH to opcl host from inside OpenClaw container
+# Usage: ssh-host [command]
+exec ssh   -i /home/node/.openclaw/.ssh/host_access_key   -F /home/node/.openclaw/.ssh/config   opcl@opcl-host "$@"
