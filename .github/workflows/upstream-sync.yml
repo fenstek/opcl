@@ -162,10 +162,14 @@ jobs:
             echo "status=success" >> "$GITHUB_OUTPUT"
             echo "Rebase succeeded -> new HEAD: ${NEW_SHA}"
           else
+            CONFLICT_FILES=$(git diff --name-only --diff-filter=U | tr '\n' ' ' | sed 's/[[:space:]]*$//')
             git rebase --abort || true
             echo "status=conflict" >> "$GITHUB_OUTPUT"
-            echo "::error::Rebase FAILED with conflicts. Manual intervention required."
-            exit 1
+            echo "conflict_files=${CONFLICT_FILES}" >> "$GITHUB_OUTPUT"
+            echo "::warning::Rebase hit conflicts. Manual intervention required."
+            if [[ -n "${CONFLICT_FILES}" ]]; then
+              echo "Conflicting files: ${CONFLICT_FILES}"
+            fi
           fi
 
       # ── 8. Push sync ветки в origin ──────────────────────────────────────────
@@ -274,12 +278,18 @@ jobs:
           echo "================================================"
           echo "  UPSTREAM SYNC -- $(date -u '+%Y-%m-%d %H:%M UTC')"
           echo "================================================"
-          echo "  Status         : SYNCED${DRY}"
-          echo "  upstream/main  : ${{ steps.check.outputs.upstream_sha }}"
-          echo "  Sync branch    : ${{ steps.branch.outputs.sync_branch }}"
-          echo "  Commits        : ${{ steps.check.outputs.commits_ahead }}"
-          [[ -n "${{ steps.pr.outputs.pr_url }}" ]] && \
-            echo "  PR             : ${{ steps.pr.outputs.pr_url }}"
+          if [[ "${{ steps.rebase.outputs.status }}" == "conflict" ]]; then
+            echo "  Status         : CONFLICT"
+            echo "  upstream/main  : ${{ steps.check.outputs.upstream_sha }}"
+            echo "  Conflicts      : ${{ steps.rebase.outputs.conflict_files }}"
+          else
+            echo "  Status         : SYNCED${DRY}"
+            echo "  upstream/main  : ${{ steps.check.outputs.upstream_sha }}"
+            echo "  Sync branch    : ${{ steps.branch.outputs.sync_branch }}"
+            echo "  Commits        : ${{ steps.check.outputs.commits_ahead }}"
+            [[ -n "${{ steps.pr.outputs.pr_url }}" ]] && \
+              echo "  PR             : ${{ steps.pr.outputs.pr_url }}"
+          fi
           echo "================================================"
 
   # ── Telegram уведомление ──────────────────────────────────────────────────────
