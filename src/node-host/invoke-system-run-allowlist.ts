@@ -2,6 +2,7 @@ import {
   analyzeArgvCommand,
   evaluateExecAllowlist,
   evaluateShellAllowlist,
+  resolvePlannedSegmentArgv,
   resolveExecApprovals,
   type ExecAllowlistEntry,
   type ExecCommandSegment,
@@ -11,11 +12,12 @@ import {
 import { resolveExecSafeBinRuntimePolicy } from "../infra/exec-safe-bin-runtime-policy.js";
 import type { RunResult } from "./invoke-types.js";
 
-export type SystemRunAllowlistAnalysis = {
+type SystemRunAllowlistAnalysis = {
   analysisOk: boolean;
   allowlistMatches: ExecAllowlistEntry[];
   allowlistSatisfied: boolean;
   segments: ExecCommandSegment[];
+  segmentAllowlistEntries: Array<ExecAllowlistEntry | null>;
 };
 
 export function evaluateSystemRunAllowlist(params: {
@@ -52,6 +54,7 @@ export function evaluateSystemRunAllowlist(params: {
           ? allowlistEval.allowlistSatisfied
           : false,
       segments: allowlistEval.segments,
+      segmentAllowlistEntries: allowlistEval.segmentAllowlistEntries,
     };
   }
 
@@ -72,6 +75,7 @@ export function evaluateSystemRunAllowlist(params: {
     allowlistSatisfied:
       params.security === "allowlist" && analysis.ok ? allowlistEval.allowlistSatisfied : false,
     segments: analysis.segments,
+    segmentAllowlistEntries: allowlistEval.segmentAllowlistEntries,
   };
 }
 
@@ -95,7 +99,7 @@ export function resolvePlannedAllowlistArgv(params: {
   ) {
     return undefined;
   }
-  const plannedAllowlistArgv = params.segments[0]?.resolution?.effectiveArgv;
+  const plannedAllowlistArgv = resolvePlannedSegmentArgv(params.segments[0]);
   return plannedAllowlistArgv && plannedAllowlistArgv.length > 0 ? plannedAllowlistArgv : null;
 }
 

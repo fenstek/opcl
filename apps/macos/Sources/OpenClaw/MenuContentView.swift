@@ -2,6 +2,7 @@ import AppKit
 import AVFoundation
 import Foundation
 import Observation
+import OpenClawKit
 import SwiftUI
 
 /// Menu contents for the OpenClaw menu bar extra.
@@ -14,6 +15,7 @@ struct MenuContent: View {
     private let heartbeatStore = HeartbeatStore.shared
     private let controlChannel = ControlChannel.shared
     private let activityStore = WorkActivityStore.shared
+    private let nodesStore = NodesStore.shared
     @Bindable private var pairingPrompter = NodePairingApprovalPrompter.shared
     @Bindable private var devicePairingPrompter = DevicePairingApprovalPrompter.shared
     @Environment(\.openSettings) private var openSettings
@@ -44,6 +46,9 @@ struct MenuContent: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(self.connectionLabel)
                     self.statusLine(label: self.healthStatus.label, color: self.healthStatus.color)
+                    if let macNodeStatus = self.macNodeStatus {
+                        self.statusLine(label: macNodeStatus.label, color: macNodeStatus.color)
+                    }
                     if self.pairingPrompter.pendingCount > 0 {
                         let repairCount = self.pairingPrompter.pendingRepairCount
                         let repairSuffix = repairCount > 0 ? " · \(repairCount) repair" : ""
@@ -170,7 +175,11 @@ struct MenuContent: View {
             await self.loadBrowserControlEnabled()
         }
         .onAppear {
-            self.startMicObserver()
+            MicRefreshSupport.startObserver(self.micObserver) {
+                MicRefreshSupport.schedule(refreshTask: &self.micRefreshTask) {
+                    await self.loadMicrophones(force: true)
+                }
+            }
         }
         .onDisappear {
             self.micRefreshTask?.cancel()
@@ -347,6 +356,31 @@ struct MenuContent: View {
         }
     }
 
+    private var macNodeStatus: (label: String, color: Color)? {
+        guard self.state.connectionMode != .unconfigured else { return nil }
+        guard case .connected = self.controlChannel.state else { return nil }
+
+        let deviceId = DeviceIdentityStore.loadOrCreate().deviceId
+        if let entry = self.nodesStore.nodes.first(where: { $0.nodeId == deviceId }) {
+            guard entry.isConnected else {
+                return ("Mac capabilities offline", .orange)
+            }
+            let commands = Set(entry.commands ?? [])
+            let missingRequiredCommands = [
+                OpenClawSystemCommand.notify.rawValue,
+                OpenClawSystemCommand.run.rawValue,
+                OpenClawSystemCommand.which.rawValue,
+            ].filter { !commands.contains($0) }
+            if !missingRequiredCommands.isEmpty {
+                return ("Mac capabilities incomplete", .orange)
+            }
+            return nil
+        }
+
+        guard !self.nodesStore.isLoading, !self.nodesStore.nodes.isEmpty else { return nil }
+        return ("Mac capabilities offline", .orange)
+    }
+
     private var healthStatus: (label: String, color: Color) {
         if let activity = self.activityStore.current {
             let color: Color = activity.role == .main ? .accentColor : .gray
@@ -425,11 +459,7 @@ struct MenuContent: View {
     }
 
     private var voiceWakeBinding: Binding<Bool> {
-        Binding(
-            get: { self.state.swabbleEnabled },
-            set: { newValue in
-                Task { await self.state.setVoiceWakeEnabled(newValue) }
-            })
+        MicRefreshSupport.voiceWakeBinding(for: self.state)
     }
 
     private var showVoiceWakeMicPicker: Bool {
@@ -546,44 +576,18 @@ struct MenuContent: View {
             }
             .map { AudioInputDevice(uid: $0.uniqueID, name: $0.localizedName) }
         self.availableMics = self.filterAliveInputs(self.availableMics)
-        self.updateSelectedMicName()
+        self.state.voiceWakeMicName = MicRefreshSupport.selectedMicName(
+            selectedID: self.state.voiceWakeMicID,
+            in: self.availableMics,
+            uid: \.uid,
+            name: \.name)
         self.loadingMics = false
-    }
-
-    private func startMicObserver() {
-        self.micObserver.start {
-            Task { @MainActor in
-                self.scheduleMicRefresh()
-            }
-        }
-    }
-
-    @MainActor
-    private func scheduleMicRefresh() {
-        self.micRefreshTask?.cancel()
-        self.micRefreshTask = Task { @MainActor in
-            try? await Task.sleep(nanoseconds: 300_000_000)
-            guard !Task.isCancelled else { return }
-            await self.loadMicrophones(force: true)
-        }
     }
 
     private func filterAliveInputs(_ inputs: [AudioInputDevice]) -> [AudioInputDevice] {
         let aliveUIDs = AudioInputDeviceObserver.aliveInputDeviceUIDs()
         guard !aliveUIDs.isEmpty else { return inputs }
         return inputs.filter { aliveUIDs.contains($0.uid) }
-    }
-
-    @MainActor
-    private func updateSelectedMicName() {
-        let selected = self.state.voiceWakeMicID
-        if selected.isEmpty {
-            self.state.voiceWakeMicName = ""
-            return
-        }
-        if let match = self.availableMics.first(where: { $0.uid == selected }) {
-            self.state.voiceWakeMicName = match.name
-        }
     }
 
     private struct AudioInputDevice: Identifiable, Equatable {

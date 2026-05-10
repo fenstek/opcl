@@ -26,7 +26,7 @@ describe("session identifier helpers", () => {
       },
     });
 
-    expect(lines).toEqual([]);
+    expect(lines).toStrictEqual([]);
   });
 
   it("adds a Codex resume hint when agent identity is resolved", () => {
@@ -53,6 +53,33 @@ describe("session identifier helpers", () => {
     expect(lines).toContain("acpx session id: acpx-123");
     expect(lines).toContain(
       "resume in Codex CLI: `codex resume inner-123` (continues this conversation).",
+    );
+  });
+
+  it("adds a Kimi resume hint when agent identity is resolved", () => {
+    const lines = resolveAcpThreadSessionDetailLines({
+      sessionKey: "agent:kimi:acp:resolved-1",
+      meta: {
+        backend: "acpx",
+        agent: "kimi",
+        runtimeSessionName: "runtime-1",
+        identity: {
+          state: "resolved",
+          source: "status",
+          lastUpdatedAt: Date.now(),
+          acpxSessionId: "acpx-kimi-123",
+          agentSessionId: "kimi-inner-123",
+        },
+        mode: "persistent",
+        state: "idle",
+        lastActivityAt: Date.now(),
+      },
+    });
+
+    expect(lines).toContain("agent session id: kimi-inner-123");
+    expect(lines).toContain("acpx session id: acpx-kimi-123");
+    expect(lines).toContain(
+      "resume in Kimi CLI: `kimi resume kimi-inner-123` (continues this conversation).",
     );
   });
 
