@@ -73,14 +73,12 @@ final class RemotePortTunnel {
         let options: [String] = [
             "-o", "BatchMode=yes",
             "-o", "ExitOnForwardFailure=yes",
-            "-o", "StrictHostKeyChecking=accept-new",
-            "-o", "UpdateHostKeys=yes",
             "-o", "ServerAliveInterval=15",
             "-o", "ServerAliveCountMax=3",
             "-o", "TCPKeepAlive=yes",
             "-N",
             "-L", "\(localPort):127.0.0.1:\(resolvedRemotePort)",
-        ]
+        ] + CommandResolver.strictHostKeyCheckingSSHOptions + CommandResolver.updateHostKeysSSHOptions
         let identity = settings.identity.trimmingCharacters(in: .whitespacesAndNewlines)
         let args = CommandResolver.sshArguments(
             target: parsed,
@@ -152,26 +150,17 @@ final class RemotePortTunnel {
         else {
             return nil
         }
-        let sshKey = Self.hostKey(sshHost)
-        let urlKey = Self.hostKey(host)
-        guard !sshKey.isEmpty, !urlKey.isEmpty else { return nil }
+        guard let sshKey = OpenClawConfigFile.canonicalHostForComparison(sshHost),
+              let urlKey = OpenClawConfigFile.canonicalHostForComparison(host)
+        else {
+            return nil
+        }
         guard sshKey == urlKey else {
             Self.logger.debug(
                 "remote url host mismatch sshHost=\(sshHost, privacy: .public) urlHost=\(host, privacy: .public)")
             return nil
         }
         return port
-    }
-
-    private static func hostKey(_ host: String) -> String {
-        let trimmed = host.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard !trimmed.isEmpty else { return "" }
-        if trimmed.contains(":") { return trimmed }
-        let digits = CharacterSet(charactersIn: "0123456789.")
-        if trimmed.rangeOfCharacter(from: digits.inverted) == nil {
-            return trimmed
-        }
-        return trimmed.split(separator: ".").first.map(String.init) ?? trimmed
     }
 
     private static func findPort(preferred: UInt16?, allowRandom: Bool) async throws -> UInt16 {

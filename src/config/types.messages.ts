@@ -4,6 +4,11 @@ import type { TtsConfig } from "./types.tts.js";
 export type GroupChatConfig = {
   mentionPatterns?: string[];
   historyLimit?: number;
+  /**
+   * Controls how group/channel turns produce visible room replies.
+   * Default: "message_tool".
+   */
+  visibleReplies?: "automatic" | "message_tool";
 };
 
 export type DmConfig = {
@@ -58,6 +63,7 @@ export type StatusReactionsEmojiConfig = {
   error?: string;
   stallSoft?: string;
   stallHard?: string;
+  compacting?: string;
 };
 
 export type StatusReactionsTimingConfig = {
@@ -86,6 +92,14 @@ export type MessagesConfig = {
   /** @deprecated Use `whatsapp.messagePrefix` (WhatsApp-only inbound prefix). */
   messagePrefix?: string;
   /**
+   * Controls how source turns produce visible replies across direct, group, and
+   * channel conversations. Group/channel turns still default to
+   * `groupChat.visibleReplies` when it is set.
+   *
+   * Default: "automatic" for direct chats, "message_tool" for groups/channels.
+   */
+  visibleReplies?: "automatic" | "message_tool";
+  /**
    * Prefix auto-added to all outbound replies.
    *
    * - string: explicit prefix (may include template variables)
@@ -112,7 +126,7 @@ export type MessagesConfig = {
   /** Emoji reaction used to acknowledge inbound messages (empty disables). */
   ackReaction?: string;
   /** When to send ack reactions. Default: "group-mentions". */
-  ackReactionScope?: "group-mentions" | "group-all" | "direct" | "all";
+  ackReactionScope?: "group-mentions" | "group-all" | "direct" | "all" | "off" | "none";
   /** Remove ack reaction after reply is sent (default: false). */
   removeAckAfterReply?: boolean;
   /** Lifecycle status reactions configuration. */
@@ -147,6 +161,10 @@ export type CommandsConfig = {
   bashForegroundMs?: number;
   /** Allow /config command (default: false). */
   config?: boolean;
+  /** Allow /mcp command for OpenClaw-managed MCP settings (default: false). */
+  mcp?: boolean;
+  /** Allow /plugins command for plugin listing and enablement toggles (default: false). */
+  plugins?: boolean;
   /** Allow /debug command (default: false). */
   debug?: boolean;
   /** Allow restart commands/tools (default: true). */

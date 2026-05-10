@@ -1,7 +1,10 @@
 import crypto from "node:crypto";
 import type { TelnyxConfig } from "../config.js";
 import type {
+  AnswerCallInput,
   EndReason,
+  GetCallStatusInput,
+  GetCallStatusResult,
   HangupCallInput,
   InitiateCallInput,
   InitiateCallResult,
@@ -27,6 +30,21 @@ import { guardedJsonApiRequest } from "./shared/guarded-json-api.js";
 export interface TelnyxProviderOptions {
   /** Skip webhook signature verification (development only, NOT for production) */
   skipVerification?: boolean;
+}
+
+function normalizeTelnyxDirection(
+  direction: string | undefined,
+): "inbound" | "outbound" | undefined {
+  switch (direction) {
+    case "incoming":
+    case "inbound":
+      return "inbound";
+    case "outgoing":
+    case "outbound":
+      return "outbound";
+    default:
+      return undefined;
+  }
 }
 
 export class TelnyxProvider implements VoiceCallProvider {
@@ -141,6 +159,9 @@ export class TelnyxProvider implements VoiceCallProvider {
       callId,
       providerCallId: data.payload?.call_control_id,
       timestamp: Date.now(),
+      direction: normalizeTelnyxDirection(data.payload?.direction),
+      from: data.payload?.from,
+      to: data.payload?.to,
     };
 
     switch (data.event_type) {
@@ -167,9 +188,10 @@ export class TelnyxProvider implements VoiceCallProvider {
         return {
           ...baseEvent,
           type: "call.speech",
-          transcript: data.payload?.transcription || "",
-          isFinal: data.payload?.is_final ?? true,
-          confidence: data.payload?.confidence,
+          transcript:
+            data.payload?.transcription_data?.transcript ?? data.payload?.transcription ?? "",
+          isFinal: data.payload?.transcription_data?.is_final ?? data.payload?.is_final ?? true,
+          confidence: data.payload?.transcription_data?.confidence ?? data.payload?.confidence,
         };
 
       case "call.hangup":
@@ -260,6 +282,15 @@ export class TelnyxProvider implements VoiceCallProvider {
   }
 
   /**
+   * Answer an inbound Telnyx Call Control leg.
+   */
+  async answerCall(input: AnswerCallInput): Promise<void> {
+    await this.apiRequest(`/calls/${input.providerCallId}/actions/answer`, {
+      command_id: `openclaw-answer-${input.callId}`,
+    });
+  }
+
+  /**
    * Play TTS audio via Telnyx speak action.
    */
   async playTts(input: PlayTtsInput): Promise<void> {
@@ -291,6 +322,37 @@ export class TelnyxProvider implements VoiceCallProvider {
       { allowNotFound: true },
     );
   }
+
+  async getCallStatus(input: GetCallStatusInput): Promise<GetCallStatusResult> {
+    try {
+      const data = await guardedJsonApiRequest<{ data?: { state?: string; is_alive?: boolean } }>({
+        url: `${this.baseUrl}/calls/${input.providerCallId}`,
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${this.apiKey}`,
+          "Content-Type": "application/json",
+        },
+        allowNotFound: true,
+        allowedHostnames: [this.apiHost],
+        auditContext: "telnyx-get-call-status",
+        errorPrefix: "Telnyx get call status error",
+      });
+
+      if (!data) {
+        return { status: "not-found", isTerminal: true };
+      }
+
+      const state = data.data?.state ?? "unknown";
+      const isAlive = data.data?.is_alive;
+      // If is_alive is missing, treat as unknown rather than terminal (P1 fix)
+      if (isAlive === undefined) {
+        return { status: state, isTerminal: false, isUnknown: true };
+      }
+      return { status: state, isTerminal: !isAlive };
+    } catch {
+      return { status: "error", isTerminal: false, isUnknown: true };
+    }
+  }
 }
 
 // -----------------------------------------------------------------------------
@@ -303,10 +365,18 @@ interface TelnyxEvent {
   payload?: {
     call_control_id?: string;
     client_state?: string;
+    direction?: string;
+    from?: string;
+    to?: string;
     text?: string;
     transcription?: string;
     is_final?: boolean;
     confidence?: number;
+    transcription_data?: {
+      transcript?: string;
+      is_final?: boolean;
+      confidence?: number;
+    };
     hangup_cause?: string;
     digit?: string;
     [key: string]: unknown;

@@ -1,14 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { buildProgram } from "./program.js";
 import {
   configureCommand,
   ensureConfigReady,
   installBaseProgramMocks,
   installSmokeProgramMocks,
-  messageCommand,
-  onboardCommand,
+  runCrestodian,
   runTui,
   runtime,
   setupCommand,
+  setupWizardCommand,
 } from "./program.test-mocks.js";
 
 installBaseProgramMocks();
@@ -24,41 +25,41 @@ vi.mock("./config-cli.js", () => ({
   runConfigUnset: vi.fn(),
 }));
 
-const { buildProgram } = await import("./program.js");
-
 describe("cli program (smoke)", () => {
+  let program = createProgram();
+
   function createProgram() {
     return buildProgram();
   }
 
   async function runProgram(argv: string[]) {
-    const program = createProgram();
     await program.parseAsync(argv, { from: "user" });
   }
 
   beforeEach(() => {
+    program = createProgram();
     vi.clearAllMocks();
     runTui.mockResolvedValue(undefined);
+    runCrestodian.mockResolvedValue(undefined);
     ensureConfigReady.mockResolvedValue(undefined);
   });
 
-  it("runs message command with required options", async () => {
-    await expect(
-      runProgram(["message", "send", "--target", "+1", "--message", "hi"]),
-    ).rejects.toThrow("exit");
-    expect(messageCommand).toHaveBeenCalled();
-  });
-
-  it("registers memory + status commands", () => {
-    const program = createProgram();
+  it("registers message + status commands", () => {
     const names = program.commands.map((command) => command.name());
-    expect(names).toContain("memory");
+    expect(names).toContain("message");
     expect(names).toContain("status");
   });
 
   it("runs tui with explicit timeout override", async () => {
     await runProgram(["tui", "--timeout-ms", "45000"]);
     expect(runTui).toHaveBeenCalledWith(expect.objectContaining({ timeoutMs: 45000 }));
+  });
+
+  it("runs crestodian one-shot requests", async () => {
+    await runProgram(["crestodian", "--message", "status"]);
+    expect(runCrestodian).toHaveBeenCalledWith(
+      expect.objectContaining({ message: "status", yes: false, json: false }),
+    );
   });
 
   it("warns and ignores invalid tui timeout override", async () => {
@@ -71,6 +72,6 @@ describe("cli program (smoke)", () => {
     await runProgram(["setup", "--remote-url", "ws://example"]);
 
     expect(setupCommand).not.toHaveBeenCalled();
-    expect(onboardCommand).toHaveBeenCalledTimes(1);
+    expect(setupWizardCommand).toHaveBeenCalledTimes(1);
   });
 });
