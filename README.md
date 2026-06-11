@@ -25,6 +25,8 @@ If you want a personal, single-user assistant that feels local, fast, and always
 
 [Website](https://openclaw.ai) · [Docs](https://docs.openclaw.ai) · [Vision](VISION.md) · [DeepWiki](https://deepwiki.com/openclaw/openclaw) · [Getting Started](https://docs.openclaw.ai/start/getting-started) · [Updating](https://docs.openclaw.ai/install/updating) · [Showcase](https://docs.openclaw.ai/start/showcase) · [FAQ](https://docs.openclaw.ai/help/faq) · [Wizard](https://docs.openclaw.ai/start/wizard) · [Nix](https://github.com/openclaw/nix-openclaw) · [Docker](https://docs.openclaw.ai/install/docker) · [Discord](https://discord.gg/clawd)
 
+Related reading: [Utildesk's OpenClaw entry](https://tools.utildesk.de/tools/openclaw/) and the [open-source AI agents comparison](https://tools.utildesk.de/ratgeber/open-source-ai-agents-im-vergleich-hermes-agent-openclaw-openhands-autogen-crewai-langgraph-und-cline/) give a practical buyer/operator view of OpenClaw alongside Hermes Agent, OpenHands, AutoGen, CrewAI, LangGraph, and Cline.
+
 Preferred setup: run the onboarding wizard (`openclaw onboard`) in your terminal.
 The wizard guides you step by step through setting up the gateway, workspace, channels, and skills. The CLI wizard is the recommended path and works on **macOS, Linux, and Windows (via WSL2; strongly recommended)**.
 Works with npm, pnpm, or bun.
