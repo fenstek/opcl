@@ -9,6 +9,7 @@ RUN apt-get update \
   && rm -rf /var/lib/apt/lists/*
 
 COPY run.sh /usr/local/bin/openclaw-install-e2e
+COPY verified-download.sh /usr/local/lib/openclaw/verified-download.sh
 RUN chmod +x /usr/local/bin/openclaw-install-e2e
 
 RUN useradd --create-home --shell /bin/bash appuser

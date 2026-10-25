@@ -66,12 +66,25 @@ enum CLIInstaller {
             .path
     }
 
-    private static func installScriptCommand(version: String, prefix: String) -> [String] {
+    static func installScriptCommand(version: String, prefix: String) -> [String] {
         let escapedVersion = self.shellEscape(version)
         let escapedPrefix = self.shellEscape(prefix)
         let script = """
-        curl -fsSL https://openclaw.bot/install-cli.sh | \
-        bash -s -- --json --no-onboard --prefix \(escapedPrefix) --version \(escapedVersion)
+        set -e
+        umask 077
+        downloadDir="$(mktemp -d "${TMPDIR:-/tmp}/openclaw-cli-install.XXXXXXXX")"
+        trap 'rm -rf -- "$downloadDir"' EXIT
+        trap 'exit 129' HUP
+        trap 'exit 130' INT
+        trap 'exit 143' TERM
+        curl -fsSL --max-redirs 5 --proto '=https' --proto-redir '=https' --tlsv1.2 --globoff --output "$downloadDir/install-cli.sh" -- https://openclaw.ai/install-cli.sh
+        actualSha256="$(shasum -a 256 "$downloadDir/install-cli.sh")"
+        actualSha256="${actualSha256%% *}"
+        if [ "$actualSha256" != '7ad6910e76cf692eb60bed987a26637548cc5363164031ddf6ffec480ae1458b' ]; then
+          echo 'CLI installer SHA256 did not match its pinned digest.' >&2
+          exit 1
+        fi
+        /bin/bash "$downloadDir/install-cli.sh" --json --no-onboard --prefix \(escapedPrefix) --version \(escapedVersion)
         """
         return ["/bin/bash", "-lc", script]
     }

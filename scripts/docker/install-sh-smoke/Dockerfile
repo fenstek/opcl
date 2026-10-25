@@ -19,6 +19,7 @@ RUN set -eux; \
   && rm -rf /var/lib/apt/lists/*
 
 COPY run.sh /usr/local/bin/openclaw-install-smoke
+COPY verified-download.sh /usr/local/lib/openclaw/verified-download.sh
 RUN chmod +x /usr/local/bin/openclaw-install-smoke
 
 ENTRYPOINT ["/usr/local/bin/openclaw-install-smoke"]

@@ -6,20 +6,41 @@ SMOKE_IMAGE="${OPENCLAW_INSTALL_SMOKE_IMAGE:-${CLAWDBOT_INSTALL_SMOKE_IMAGE:-ope
 NONROOT_IMAGE="${OPENCLAW_INSTALL_NONROOT_IMAGE:-${CLAWDBOT_INSTALL_NONROOT_IMAGE:-openclaw-install-nonroot:local}}"
 INSTALL_URL="${OPENCLAW_INSTALL_URL:-${CLAWDBOT_INSTALL_URL:-https://openclaw.bot/install.sh}}"
 CLI_INSTALL_URL="${OPENCLAW_INSTALL_CLI_URL:-${CLAWDBOT_INSTALL_CLI_URL:-https://openclaw.bot/install-cli.sh}}"
+INSTALL_SHA256="${OPENCLAW_INSTALL_SHA256:-${CLAWDBOT_INSTALL_SHA256:-}}"
+CLI_INSTALL_SHA256="${OPENCLAW_INSTALL_CLI_SHA256:-${CLAWDBOT_INSTALL_CLI_SHA256:-}}"
 SKIP_NONROOT="${OPENCLAW_INSTALL_SMOKE_SKIP_NONROOT:-${CLAWDBOT_INSTALL_SMOKE_SKIP_NONROOT:-0}}"
 LATEST_DIR="$(mktemp -d)"
 LATEST_FILE="${LATEST_DIR}/latest"
+CONTEXT_ROOT="$(mktemp -d)"
+trap 'rm -rf -- "$LATEST_DIR" "$CONTEXT_ROOT"' EXIT HUP INT TERM
+
+stage_context() {
+  local name="$1"
+  local source_dir="$ROOT_DIR/scripts/docker/$name"
+  local target_dir="$CONTEXT_ROOT/$name"
+  mkdir -p "$target_dir"
+  cp -- "$source_dir/Dockerfile" "$source_dir/run.sh" "$target_dir/"
+  if [[ -f "$source_dir/run-cli.sh" ]]; then
+    cp -- "$source_dir/run-cli.sh" "$target_dir/"
+  fi
+  cp -- "$ROOT_DIR/scripts/installers/verified-download.sh" "$target_dir/"
+  printf '%s\n' "$target_dir"
+}
+
+SMOKE_CONTEXT="$(stage_context install-sh-smoke)"
+NONROOT_CONTEXT="$(stage_context install-sh-nonroot)"
 
 echo "==> Build smoke image (upgrade, root): $SMOKE_IMAGE"
 docker build \
   -t "$SMOKE_IMAGE" \
-  -f "$ROOT_DIR/scripts/docker/install-sh-smoke/Dockerfile" \
-  "$ROOT_DIR/scripts/docker/install-sh-smoke"
+  -f "$SMOKE_CONTEXT/Dockerfile" \
+  "$SMOKE_CONTEXT"
 
-echo "==> Run installer smoke test (root): $INSTALL_URL"
+echo "==> Run installer smoke test (root)"
 docker run --rm -t \
   -v "${LATEST_DIR}:/out" \
   -e OPENCLAW_INSTALL_URL="$INSTALL_URL" \
+  -e OPENCLAW_INSTALL_SHA256="$INSTALL_SHA256" \
   -e OPENCLAW_INSTALL_METHOD=npm \
   -e OPENCLAW_INSTALL_LATEST_OUT="/out/latest" \
   -e OPENCLAW_INSTALL_SMOKE_PREVIOUS="${OPENCLAW_INSTALL_SMOKE_PREVIOUS:-${CLAWDBOT_INSTALL_SMOKE_PREVIOUS:-}}" \
@@ -39,12 +60,13 @@ else
   echo "==> Build non-root image: $NONROOT_IMAGE"
   docker build \
     -t "$NONROOT_IMAGE" \
-    -f "$ROOT_DIR/scripts/docker/install-sh-nonroot/Dockerfile" \
-    "$ROOT_DIR/scripts/docker/install-sh-nonroot"
+    -f "$NONROOT_CONTEXT/Dockerfile" \
+    "$NONROOT_CONTEXT"
 
-  echo "==> Run installer non-root test: $INSTALL_URL"
+  echo "==> Run installer non-root test"
   docker run --rm -t \
     -e OPENCLAW_INSTALL_URL="$INSTALL_URL" \
+    -e OPENCLAW_INSTALL_SHA256="$INSTALL_SHA256" \
     -e OPENCLAW_INSTALL_METHOD=npm \
     -e OPENCLAW_INSTALL_EXPECT_VERSION="$LATEST_VERSION" \
     -e OPENCLAW_NO_ONBOARD=1 \
@@ -64,9 +86,9 @@ fi
 
 echo "==> Run CLI installer non-root test (same image)"
 docker run --rm -t \
-  --entrypoint /bin/bash \
-  -e OPENCLAW_INSTALL_URL="$INSTALL_URL" \
+  --entrypoint /usr/local/bin/openclaw-install-cli \
   -e OPENCLAW_INSTALL_CLI_URL="$CLI_INSTALL_URL" \
+  -e OPENCLAW_INSTALL_CLI_SHA256="$CLI_INSTALL_SHA256" \
   -e OPENCLAW_NO_ONBOARD=1 \
   -e DEBIAN_FRONTEND=noninteractive \
-  "$NONROOT_IMAGE" -lc "curl -fsSL \"$CLI_INSTALL_URL\" | bash -s -- --set-npm-prefix --no-onboard"
+  "$NONROOT_IMAGE"

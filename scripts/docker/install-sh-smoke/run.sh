@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-INSTALL_URL="${OPENCLAW_INSTALL_URL:-https://openclaw.bot/install.sh}"
+INSTALL_URL="${OPENCLAW_INSTALL_URL:-${CLAWDBOT_INSTALL_URL:-https://openclaw.bot/install.sh}}"
+INSTALL_SHA256="${OPENCLAW_INSTALL_SHA256:-${CLAWDBOT_INSTALL_SHA256:-}}"
 SMOKE_PREVIOUS_VERSION="${OPENCLAW_INSTALL_SMOKE_PREVIOUS:-}"
 SKIP_PREVIOUS="${OPENCLAW_INSTALL_SMOKE_SKIP_PREVIOUS:-0}"
 DEFAULT_PACKAGE="openclaw"
 PACKAGE_NAME="${OPENCLAW_INSTALL_PACKAGE:-$DEFAULT_PACKAGE}"
+source /usr/local/lib/openclaw/verified-download.sh
 
 echo "==> Resolve npm versions"
 LATEST_VERSION="$(npm view "$PACKAGE_NAME" version)"
@@ -47,8 +49,8 @@ else
   npm install -g "${PACKAGE_NAME}@${PREVIOUS_VERSION}"
 fi
 
-echo "==> Run official installer one-liner"
-curl -fsSL "$INSTALL_URL" | bash
+echo "==> Run verified official installer"
+openclaw_run_verified_installer "$INSTALL_URL" "$INSTALL_SHA256"
 
 echo "==> Verify installed version"
 CLI_NAME="$PACKAGE_NAME"

@@ -4,21 +4,30 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 IMAGE_NAME="${OPENCLAW_INSTALL_E2E_IMAGE:-${CLAWDBOT_INSTALL_E2E_IMAGE:-openclaw-install-e2e:local}}"
 INSTALL_URL="${OPENCLAW_INSTALL_URL:-${CLAWDBOT_INSTALL_URL:-https://openclaw.bot/install.sh}}"
+INSTALL_SHA256="${OPENCLAW_INSTALL_SHA256:-${CLAWDBOT_INSTALL_SHA256:-}}"
 
 OPENAI_API_KEY="${OPENAI_API_KEY:-}"
 ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY:-}"
 ANTHROPIC_API_TOKEN="${ANTHROPIC_API_TOKEN:-}"
 OPENCLAW_E2E_MODELS="${OPENCLAW_E2E_MODELS:-${CLAWDBOT_E2E_MODELS:-}}"
+CONTEXT_ROOT="$(mktemp -d)"
+trap 'rm -rf -- "$CONTEXT_ROOT"' EXIT HUP INT TERM
+CONTEXT_DIR="$CONTEXT_ROOT/install-sh-e2e"
+mkdir -p "$CONTEXT_DIR"
+cp -- "$ROOT_DIR/scripts/docker/install-sh-e2e/Dockerfile" \
+  "$ROOT_DIR/scripts/docker/install-sh-e2e/run.sh" \
+  "$ROOT_DIR/scripts/installers/verified-download.sh" "$CONTEXT_DIR/"
 
 echo "==> Build image: $IMAGE_NAME"
 docker build \
   -t "$IMAGE_NAME" \
-  -f "$ROOT_DIR/scripts/docker/install-sh-e2e/Dockerfile" \
-  "$ROOT_DIR/scripts/docker/install-sh-e2e"
+  -f "$CONTEXT_DIR/Dockerfile" \
+  "$CONTEXT_DIR"
 
 echo "==> Run E2E installer test"
 docker run --rm \
   -e OPENCLAW_INSTALL_URL="$INSTALL_URL" \
+  -e OPENCLAW_INSTALL_SHA256="$INSTALL_SHA256" \
   -e OPENCLAW_INSTALL_TAG="${OPENCLAW_INSTALL_TAG:-${CLAWDBOT_INSTALL_TAG:-latest}}" \
   -e OPENCLAW_E2E_MODELS="$OPENCLAW_E2E_MODELS" \
   -e OPENCLAW_INSTALL_E2E_PREVIOUS="${OPENCLAW_INSTALL_E2E_PREVIOUS:-${CLAWDBOT_INSTALL_E2E_PREVIOUS:-}}" \

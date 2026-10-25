@@ -27,6 +27,8 @@ ENV NPM_CONFIG_FUND=false
 ENV NPM_CONFIG_AUDIT=false
 
 COPY run.sh /usr/local/bin/openclaw-install-nonroot
-RUN sudo chmod +x /usr/local/bin/openclaw-install-nonroot
+COPY run-cli.sh /usr/local/bin/openclaw-install-cli
+COPY verified-download.sh /usr/local/lib/openclaw/verified-download.sh
+RUN sudo chmod +x /usr/local/bin/openclaw-install-nonroot /usr/local/bin/openclaw-install-cli
 
 ENTRYPOINT ["/usr/local/bin/openclaw-install-nonroot"]

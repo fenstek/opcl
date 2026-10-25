@@ -1,7 +1,13 @@
 FROM node:22-bookworm@sha256:cd7bcd2e7a1e6f72052feb023c7f6b722205d3fcab7bbcbd2d1bfdab10b1e935
 
-# Install Bun (required for build scripts)
-RUN curl -fsSL https://bun.sh/install | bash
+ARG TARGETARCH
+COPY scripts/installers/verified-download.sh scripts/installers/install-bun.sh /usr/local/lib/openclaw/
+
+# Bun is installed from a versioned release archive after verifying its pinned SHA256.
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends unzip \
+  && rm -rf /var/lib/apt/lists/* \
+  && BUN_INSTALL_DIR=/root/.bun bash /usr/local/lib/openclaw/install-bun.sh
 ENV PATH="/root/.bun/bin:${PATH}"
 
 RUN corepack enable

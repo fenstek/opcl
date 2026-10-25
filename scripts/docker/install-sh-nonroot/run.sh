@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-INSTALL_URL="${OPENCLAW_INSTALL_URL:-https://openclaw.bot/install.sh}"
+INSTALL_URL="${OPENCLAW_INSTALL_URL:-${CLAWDBOT_INSTALL_URL:-https://openclaw.bot/install.sh}}"
+INSTALL_SHA256="${OPENCLAW_INSTALL_SHA256:-${CLAWDBOT_INSTALL_SHA256:-}}"
 DEFAULT_PACKAGE="openclaw"
 PACKAGE_NAME="${OPENCLAW_INSTALL_PACKAGE:-$DEFAULT_PACKAGE}"
+source /usr/local/lib/openclaw/verified-download.sh
 
 echo "==> Pre-flight: ensure git absent"
 if command -v git >/dev/null; then
@@ -11,8 +13,8 @@ if command -v git >/dev/null; then
   exit 1
 fi
 
-echo "==> Run installer (non-root user)"
-curl -fsSL "$INSTALL_URL" | bash
+echo "==> Run verified installer (non-root user)"
+openclaw_run_verified_installer "$INSTALL_URL" "$INSTALL_SHA256"
 
 # Ensure PATH picks up user npm prefix
 export PATH="$HOME/.npm-global/bin:$PATH"

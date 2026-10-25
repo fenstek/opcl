@@ -2,6 +2,7 @@
 set -euo pipefail
 
 INSTALL_URL="${OPENCLAW_INSTALL_URL:-${CLAWDBOT_INSTALL_URL:-https://openclaw.bot/install.sh}}"
+INSTALL_SHA256="${OPENCLAW_INSTALL_SHA256:-${CLAWDBOT_INSTALL_SHA256:-}}"
 MODELS_MODE="${OPENCLAW_E2E_MODELS:-${CLAWDBOT_E2E_MODELS:-both}}" # both|openai|anthropic
 INSTALL_TAG="${OPENCLAW_INSTALL_TAG:-${CLAWDBOT_INSTALL_TAG:-latest}}"
 E2E_PREVIOUS_VERSION="${OPENCLAW_INSTALL_E2E_PREVIOUS:-${CLAWDBOT_INSTALL_E2E_PREVIOUS:-}}"
@@ -9,6 +10,7 @@ SKIP_PREVIOUS="${OPENCLAW_INSTALL_E2E_SKIP_PREVIOUS:-${CLAWDBOT_INSTALL_E2E_SKIP
 OPENAI_API_KEY="${OPENAI_API_KEY:-}"
 ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY:-}"
 ANTHROPIC_API_TOKEN="${ANTHROPIC_API_TOKEN:-}"
+source /usr/local/lib/openclaw/verified-download.sh
 
 if [[ "$MODELS_MODE" != "both" && "$MODELS_MODE" != "openai" && "$MODELS_MODE" != "anthropic" ]]; then
   echo "ERROR: OPENCLAW_E2E_MODELS must be one of: both|openai|anthropic" >&2
@@ -58,13 +60,14 @@ else
   npm install -g "openclaw@${PREVIOUS_VERSION}"
 fi
 
-echo "==> Run official installer one-liner"
+echo "==> Run verified official installer"
 if [[ "$INSTALL_TAG" == "beta" ]]; then
-  OPENCLAW_BETA=1 CLAWDBOT_BETA=1 curl -fsSL "$INSTALL_URL" | bash
+  OPENCLAW_BETA=1 CLAWDBOT_BETA=1 openclaw_run_verified_installer "$INSTALL_URL" "$INSTALL_SHA256"
 elif [[ "$INSTALL_TAG" != "latest" ]]; then
-  OPENCLAW_VERSION="$INSTALL_TAG" CLAWDBOT_VERSION="$INSTALL_TAG" curl -fsSL "$INSTALL_URL" | bash
+  OPENCLAW_VERSION="$INSTALL_TAG" CLAWDBOT_VERSION="$INSTALL_TAG" \
+    openclaw_run_verified_installer "$INSTALL_URL" "$INSTALL_SHA256"
 else
-  curl -fsSL "$INSTALL_URL" | bash
+  openclaw_run_verified_installer "$INSTALL_URL" "$INSTALL_SHA256"
 fi
 
 echo "==> Verify installed version"

@@ -248,8 +248,14 @@ This avoids re-running `pnpm install` unless lockfiles change:
 ```dockerfile
 FROM node:22-bookworm
 
-# Install Bun (required for build scripts)
-RUN curl -fsSL https://bun.sh/install | bash
+# Install the pinned Bun release archive and verify its SHA256 before extracting the binary.
+ARG TARGETARCH
+COPY scripts/installers/verified-download.sh scripts/installers/install-bun.sh /usr/local/lib/openclaw/
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends unzip \
+  && rm -rf /var/lib/apt/lists/*
+ENV BUN_INSTALL_DIR=/root/.bun
+RUN set -e; bash /usr/local/lib/openclaw/install-bun.sh
 ENV PATH="/root/.bun/bin:${PATH}"
 
 RUN corepack enable
